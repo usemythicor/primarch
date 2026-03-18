@@ -1,6 +1,8 @@
+mod git;
 mod pty;
 mod workspace;
 
+use git::{GitManager, GitStatus, BranchInfo, FileDiff, CommitInfo, WatcherManager};
 use parking_lot::RwLock;
 use pty::{detect_shells, PtyManager, ShellInfo};
 use std::io::Read;
@@ -9,9 +11,11 @@ use std::thread;
 use tauri::{AppHandle, Emitter, State};
 use workspace::{delete_workspace, list_workspaces, load_workspace, save_workspace, Workspace};
 
-/// Shared state for the PTY manager
+/// Shared state for the application
 struct AppState {
     pty_manager: PtyManager,
+    git_manager: GitManager,
+    watcher_manager: WatcherManager,
 }
 
 /// Create a new terminal session
@@ -150,16 +154,243 @@ fn list_workspaces_cmd() -> Result<Vec<Workspace>, String> {
     list_workspaces()
 }
 
+// ============ Git Commands ============
+
+/// Discover a git repository from a path
+#[tauri::command]
+fn git_discover_repo(path: String) -> Result<String, String> {
+    GitManager::discover_repository(&path)
+}
+
+/// Open a git repository
+#[tauri::command]
+fn git_open_repo(
+    state: State<'_, Arc<RwLock<AppState>>>,
+    path: String,
+) -> Result<String, String> {
+    state.read().git_manager.open_repository(&path)
+}
+
+/// Close a git repository
+#[tauri::command]
+fn git_close_repo(
+    state: State<'_, Arc<RwLock<AppState>>>,
+    repo_id: String,
+) -> Result<(), String> {
+    state.read().git_manager.close_repository(&repo_id)
+}
+
+/// Get repository status
+#[tauri::command]
+fn git_status(
+    state: State<'_, Arc<RwLock<AppState>>>,
+    repo_id: String,
+) -> Result<GitStatus, String> {
+    state.read().git_manager.get_status(&repo_id)
+}
+
+/// Get current branch info
+#[tauri::command]
+fn git_branch_info(
+    state: State<'_, Arc<RwLock<AppState>>>,
+    repo_id: String,
+) -> Result<BranchInfo, String> {
+    state.read().git_manager.get_branch_info(&repo_id)
+}
+
+/// List all branches
+#[tauri::command]
+fn git_list_branches(
+    state: State<'_, Arc<RwLock<AppState>>>,
+    repo_id: String,
+) -> Result<Vec<BranchInfo>, String> {
+    state.read().git_manager.list_branches(&repo_id)
+}
+
+/// Stage a file
+#[tauri::command]
+fn git_stage_file(
+    state: State<'_, Arc<RwLock<AppState>>>,
+    repo_id: String,
+    path: String,
+) -> Result<(), String> {
+    state.read().git_manager.stage_file(&repo_id, &path)
+}
+
+/// Unstage a file
+#[tauri::command]
+fn git_unstage_file(
+    state: State<'_, Arc<RwLock<AppState>>>,
+    repo_id: String,
+    path: String,
+) -> Result<(), String> {
+    state.read().git_manager.unstage_file(&repo_id, &path)
+}
+
+/// Stage all changes
+#[tauri::command]
+fn git_stage_all(
+    state: State<'_, Arc<RwLock<AppState>>>,
+    repo_id: String,
+) -> Result<(), String> {
+    state.read().git_manager.stage_all(&repo_id)
+}
+
+/// Create a commit
+#[tauri::command]
+fn git_commit(
+    state: State<'_, Arc<RwLock<AppState>>>,
+    repo_id: String,
+    message: String,
+) -> Result<String, String> {
+    state.read().git_manager.commit(&repo_id, &message)
+}
+
+/// Get diff for a specific file
+#[tauri::command]
+fn git_diff_file(
+    state: State<'_, Arc<RwLock<AppState>>>,
+    repo_id: String,
+    path: String,
+    staged: bool,
+) -> Result<FileDiff, String> {
+    state.read().git_manager.get_file_diff(&repo_id, &path, staged)
+}
+
+/// Get diff for a file from a specific commit
+#[tauri::command]
+fn git_diff_commit(
+    state: State<'_, Arc<RwLock<AppState>>>,
+    repo_id: String,
+    commit_id: String,
+    path: String,
+) -> Result<FileDiff, String> {
+    state.read().git_manager.get_commit_file_diff(&repo_id, &commit_id, &path)
+}
+
+/// Get diff stats (files changed, insertions, deletions)
+#[tauri::command]
+fn git_diff_stats(
+    state: State<'_, Arc<RwLock<AppState>>>,
+    repo_id: String,
+    staged: bool,
+) -> Result<(u32, u32, u32), String> {
+    state.read().git_manager.get_diff_stats(&repo_id, staged)
+}
+
+/// Fetch from remote
+#[tauri::command]
+fn git_fetch(
+    state: State<'_, Arc<RwLock<AppState>>>,
+    repo_id: String,
+    remote: Option<String>,
+) -> Result<(), String> {
+    let remote = remote.unwrap_or_else(|| "origin".to_string());
+    state.read().git_manager.fetch(&repo_id, &remote)
+}
+
+/// Pull from remote
+#[tauri::command]
+fn git_pull(
+    state: State<'_, Arc<RwLock<AppState>>>,
+    repo_id: String,
+    remote: Option<String>,
+) -> Result<String, String> {
+    let remote = remote.unwrap_or_else(|| "origin".to_string());
+    state.read().git_manager.pull(&repo_id, &remote)
+}
+
+/// Push to remote
+#[tauri::command]
+fn git_push(
+    state: State<'_, Arc<RwLock<AppState>>>,
+    repo_id: String,
+    remote: Option<String>,
+) -> Result<(), String> {
+    let remote = remote.unwrap_or_else(|| "origin".to_string());
+    state.read().git_manager.push(&repo_id, &remote)
+}
+
+/// List remotes
+#[tauri::command]
+fn git_list_remotes(
+    state: State<'_, Arc<RwLock<AppState>>>,
+    repo_id: String,
+) -> Result<Vec<String>, String> {
+    state.read().git_manager.list_remotes(&repo_id)
+}
+
+/// Get commit history
+#[tauri::command]
+fn git_log(
+    state: State<'_, Arc<RwLock<AppState>>>,
+    repo_id: String,
+    limit: Option<usize>,
+    skip: Option<usize>,
+) -> Result<Vec<CommitInfo>, String> {
+    let limit = limit.unwrap_or(50);
+    let skip = skip.unwrap_or(0);
+    state.read().git_manager.get_commit_log(&repo_id, limit, skip)
+}
+
+/// Get single commit info
+#[tauri::command]
+fn git_show_commit(
+    state: State<'_, Arc<RwLock<AppState>>>,
+    repo_id: String,
+    commit_id: String,
+) -> Result<CommitInfo, String> {
+    state.read().git_manager.get_commit(&repo_id, &commit_id)
+}
+
+/// Get files changed in a commit
+#[tauri::command]
+fn git_commit_files(
+    state: State<'_, Arc<RwLock<AppState>>>,
+    repo_id: String,
+    commit_id: String,
+) -> Result<Vec<String>, String> {
+    state.read().git_manager.get_commit_files(&repo_id, &commit_id)
+}
+
+/// Start watching a repository for file changes
+#[tauri::command]
+fn git_start_watcher(
+    app: AppHandle,
+    state: State<'_, Arc<RwLock<AppState>>>,
+    repo_id: String,
+    repo_path: String,
+) -> Result<(), String> {
+    state.read().watcher_manager.start_watching(
+        app,
+        repo_id,
+        std::path::PathBuf::from(repo_path),
+    )
+}
+
+/// Stop watching a repository
+#[tauri::command]
+fn git_stop_watcher(
+    state: State<'_, Arc<RwLock<AppState>>>,
+    repo_id: String,
+) -> Result<(), String> {
+    state.read().watcher_manager.stop_watching(&repo_id);
+    Ok(())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let state = Arc::new(RwLock::new(AppState {
         pty_manager: PtyManager::new(),
+        git_manager: GitManager::new(),
+        watcher_manager: WatcherManager::new(),
     }));
 
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .manage(state)
         .invoke_handler(tauri::generate_handler![
+            // Terminal commands
             create_terminal,
             write_terminal,
             resize_terminal,
@@ -168,10 +399,34 @@ pub fn run() {
             get_terminal_cwd,
             start_terminal_reader,
             get_available_shells,
+            // Workspace commands
             save_workspace_cmd,
             load_workspace_cmd,
             delete_workspace_cmd,
             list_workspaces_cmd,
+            // Git commands
+            git_discover_repo,
+            git_open_repo,
+            git_close_repo,
+            git_status,
+            git_branch_info,
+            git_list_branches,
+            git_stage_file,
+            git_unstage_file,
+            git_stage_all,
+            git_commit,
+            git_diff_file,
+            git_diff_commit,
+            git_diff_stats,
+            git_fetch,
+            git_pull,
+            git_push,
+            git_list_remotes,
+            git_log,
+            git_show_commit,
+            git_commit_files,
+            git_start_watcher,
+            git_stop_watcher,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

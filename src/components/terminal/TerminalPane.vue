@@ -3,9 +3,11 @@ import { ref, onMounted, onUnmounted, watch, computed } from 'vue';
 import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import { WebLinksAddon } from '@xterm/addon-web-links';
+import { invoke } from '@tauri-apps/api/core';
 import { useTerminal } from '../../composables/useTerminal';
 import { useSettingsStore } from '../../stores/settings';
 import { useLayoutStore } from '../../stores/layout';
+import { useGitStore } from '../../stores/git';
 import '@xterm/xterm/css/xterm.css';
 
 const props = defineProps<{
@@ -22,6 +24,7 @@ const emit = defineEmits<{
 
 const settingsStore = useSettingsStore();
 const layoutStore = useLayoutStore();
+const gitStore = useGitStore();
 const terminalRef = ref<HTMLDivElement>();
 const sessionId = ref<string>();
 const isConnected = ref(false);
@@ -84,6 +87,39 @@ onMounted(async () => {
     // Register session with layout store for cwd tracking
     if (props.nodeId) {
       layoutStore.registerSession(props.nodeId, sessionId.value);
+    }
+
+    // Try to detect git repository from CWD
+    if (!gitStore.hasRepo) {
+      // Use provided cwd or try to get it from the terminal session
+      const tryDetectGitRepo = async () => {
+        let cwd = props.cwd;
+
+        // If no cwd provided, try to get it from the terminal session
+        if (!cwd && sessionId.value) {
+          try {
+            cwd = await invoke<string>('get_terminal_cwd', { sessionId: sessionId.value });
+            console.log('[Git] Got terminal CWD:', cwd);
+          } catch (e) {
+            console.warn('[Git] Could not get terminal CWD:', e);
+          }
+        }
+
+        if (cwd) {
+          console.log('[Git] Trying to detect git repo from:', cwd);
+          gitStore.openRepository(cwd).then(() => {
+            console.log('[Git] Successfully opened repository');
+          }).catch((e) => {
+            console.log('[Git] Not a git repo or failed to open:', e);
+          });
+        } else {
+          console.log('[Git] No CWD available for git detection');
+        }
+      };
+
+      // Try immediately and again after a short delay (terminal might need to initialize)
+      tryDetectGitRepo();
+      setTimeout(tryDetectGitRepo, 1000);
     }
 
     // Start reading from PTY

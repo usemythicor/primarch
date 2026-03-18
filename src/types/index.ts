@@ -60,3 +60,80 @@ export interface Theme {
   brightCyan: string;
   brightWhite: string;
 }
+
+// Git types
+export interface GitStatus {
+  branch: string | null;
+  upstream: string | null;
+  ahead: number;
+  behind: number;
+  staged: FileStatus[];
+  unstaged: FileStatus[];
+  untracked: string[];
+  conflicted: string[];
+}
+
+export interface FileStatus {
+  path: string;
+  status: FileStatusType;
+  oldPath?: string;
+}
+
+export type FileStatusType =
+  | 'Modified'
+  | 'Added'
+  | 'Deleted'
+  | 'Renamed'
+  | 'Copied'
+  | 'TypeChanged';
+
+export interface BranchInfo {
+  name: string;
+  isHead: boolean;
+  upstream: string | null;
+  ahead: number;
+  behind: number;
+}
+
+export interface FileDiff {
+  path: string;
+  old_path?: string;
+  hunks: DiffHunk[];
+  is_binary: boolean;
+  additions: number;
+  deletions: number;
+}
+
+export interface DiffHunk {
+  header: string;
+  old_start: number;
+  old_lines: number;
+  new_start: number;
+  new_lines: number;
+  lines: DiffLine[];
+}
+
+export interface DiffLine {
+  origin: string;
+  content: string;
+  old_lineno?: number;
+  new_lineno?: number;
+}
+
+export interface CommitInfo {
+  oid: string;
+  short_id: string;
+  message: string;
+  summary: string;
+  author_name: string;
+  author_email: string;
+  timestamp: number;
+  parent_ids: string[];
+  refs: RefInfo[];
+}
+
+export interface RefInfo {
+  name: string;
+  ref_type: 'Branch' | 'Tag' | 'RemoteBranch';
+  is_head: boolean;
+}

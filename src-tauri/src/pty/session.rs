@@ -128,32 +128,36 @@ impl TerminalSession {
     /// Get the current working directory of the shell process
     #[cfg(windows)]
     pub fn get_cwd(&self) -> Result<String, String> {
-        use std::mem;
-        use std::ptr;
-        use windows::Win32::Foundation::{CloseHandle, HANDLE};
-        use windows::Win32::System::Diagnostics::Debug::ReadProcessMemory;
+        use windows::Win32::Foundation::CloseHandle;
         use windows::Win32::System::Threading::{
             OpenProcess, PROCESS_QUERY_INFORMATION, PROCESS_VM_READ,
         };
 
-        let pid = self.get_pid().ok_or("Process ID not available")?;
+        // Try to get actual CWD from process memory
+        if let Some(pid) = self.get_pid() {
+            let result = unsafe {
+                // Open the process
+                if let Ok(process_handle) = OpenProcess(
+                    PROCESS_QUERY_INFORMATION | PROCESS_VM_READ,
+                    false,
+                    pid,
+                ) {
+                    let result = get_process_cwd_internal(process_handle);
+                    let _ = CloseHandle(process_handle);
+                    result
+                } else {
+                    Err("Failed to open process".to_string())
+                }
+            };
 
-        unsafe {
-            // Open the process
-            let process_handle = OpenProcess(
-                PROCESS_QUERY_INFORMATION | PROCESS_VM_READ,
-                false,
-                pid,
-            )
-            .map_err(|e| format!("Failed to open process: {}", e))?;
-
-            // Use ntapi to get process info
-            let result = get_process_cwd_internal(process_handle);
-
-            let _ = CloseHandle(process_handle);
-
-            result
+            // If we got the CWD successfully, return it
+            if let Ok(cwd) = result {
+                return Ok(cwd);
+            }
         }
+
+        // Fall back to initial_cwd if we couldn't get the actual CWD
+        Ok(self.initial_cwd.clone())
     }
 
     #[cfg(not(windows))]
