@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue';
+import { ref } from 'vue';
 import {
   CodeBracketIcon,
   ArrowPathIcon,
@@ -10,6 +11,8 @@ import {
   ChevronDownIcon,
   ArrowUturnLeftIcon,
   TrashIcon,
+  CloudArrowDownIcon,
+  CloudArrowUpIcon,
 } from '@heroicons/vue/24/outline';
 import { useGitStore } from '../../stores/git';
 import FileChangeItem from './FileChangeItem.vue';
@@ -23,7 +26,6 @@ const emit = defineEmits<{
 
 const gitStore = useGitStore();
 
-const isLoading = computed(() => gitStore.isLoading);
 const stagedFiles = computed(() => gitStore.stagedFiles);
 const unstagedFiles = computed(() => gitStore.unstagedFiles);
 const untrackedFiles = computed(() => gitStore.untrackedFiles);
@@ -35,6 +37,39 @@ const activeTab = computed(() => gitStore.activeTab);
 const branchName = computed(() => gitStore.branchName);
 const branchSelectorVisible = computed(() => gitStore.branchSelectorVisible);
 const isDiscarding = computed(() => gitStore.isDiscarding);
+const ahead = computed(() => gitStore.ahead);
+const behind = computed(() => gitStore.behind);
+const isRemoteOperating = computed(() => gitStore.isRemoteOperating);
+
+const showActionsMenu = ref(false);
+
+function toggleActionsMenu() {
+  showActionsMenu.value = !showActionsMenu.value;
+}
+
+function closeActionsMenu() {
+  showActionsMenu.value = false;
+}
+
+async function handlePull() {
+  closeActionsMenu();
+  await gitStore.pull();
+}
+
+async function handlePush() {
+  closeActionsMenu();
+  await gitStore.push();
+}
+
+async function handleSync() {
+  closeActionsMenu();
+  await gitStore.sync();
+}
+
+function handleRefresh() {
+  closeActionsMenu();
+  refresh();
+}
 
 function setTab(tab: 'changes' | 'history') {
   gitStore.setActiveTab(tab);
@@ -99,14 +134,74 @@ function hideBranchSelector() {
         <span class="text-header">SOURCE CONTROL</span>
       </div>
       <div class="flex items-center gap-1">
-        <button
-          @click="refresh"
-          class="btn-icon"
-          :class="isLoading ? 'animate-spin' : ''"
-          title="Refresh"
-        >
-          <ArrowPathIcon class="w-4 h-4" />
-        </button>
+        <!-- Actions dropdown -->
+        <div class="relative">
+          <button
+            @click="toggleActionsMenu"
+            class="btn-icon"
+            :class="{ 'btn-toolbar-active': showActionsMenu }"
+          >
+            <ChevronDownIcon class="w-4 h-4" />
+          </button>
+
+          <Transition
+            enter-active-class="transition duration-100 ease-out"
+            enter-from-class="opacity-0 -translate-y-1"
+            enter-to-class="opacity-100 translate-y-0"
+            leave-active-class="transition duration-75 ease-in"
+            leave-from-class="opacity-100 translate-y-0"
+            leave-to-class="opacity-0 -translate-y-1"
+          >
+            <div
+              v-if="showActionsMenu"
+              class="absolute right-0 top-full mt-1 w-48 z-50 py-1"
+              style="background: var(--bg-secondary); border: 1px solid var(--border-default);"
+            >
+              <button
+                @click="handlePull"
+                :disabled="isRemoteOperating"
+                class="git-menu-item w-full flex items-center gap-3 px-3 py-2 text-left transition-colors"
+              >
+                <CloudArrowDownIcon class="w-4 h-4 flex-shrink-0" :style="{ color: behind > 0 ? 'var(--accent-orange)' : 'var(--text-muted)' }" />
+                <span class="text-label flex-1" style="color: var(--text-secondary);">Pull</span>
+                <span v-if="behind > 0" class="text-label" style="color: var(--accent-orange);">{{ behind }}</span>
+              </button>
+              <button
+                @click="handlePush"
+                :disabled="isRemoteOperating"
+                class="git-menu-item w-full flex items-center gap-3 px-3 py-2 text-left transition-colors"
+              >
+                <CloudArrowUpIcon class="w-4 h-4 flex-shrink-0" :style="{ color: ahead > 0 ? 'var(--accent-green)' : 'var(--text-muted)' }" />
+                <span class="text-label flex-1" style="color: var(--text-secondary);">Push</span>
+                <span v-if="ahead > 0" class="text-label" style="color: var(--accent-green);">{{ ahead }}</span>
+              </button>
+              <div class="my-1" style="border-top: 1px solid var(--border-subtle);"></div>
+              <button
+                @click="handleSync"
+                :disabled="isRemoteOperating"
+                class="git-menu-item w-full flex items-center gap-3 px-3 py-2 text-left transition-colors"
+              >
+                <ArrowPathIcon class="w-4 h-4 flex-shrink-0" style="color: var(--text-muted);" />
+                <span class="text-label" style="color: var(--text-secondary);">Sync</span>
+              </button>
+              <button
+                @click="handleRefresh"
+                class="git-menu-item w-full flex items-center gap-3 px-3 py-2 text-left transition-colors"
+              >
+                <ArrowPathIcon class="w-4 h-4 flex-shrink-0" style="color: var(--text-muted);" />
+                <span class="text-label" style="color: var(--text-secondary);">Refresh</span>
+              </button>
+            </div>
+          </Transition>
+
+          <!-- Backdrop -->
+          <div
+            v-if="showActionsMenu"
+            class="fixed inset-0 z-40"
+            @click="closeActionsMenu"
+          ></div>
+        </div>
+
         <button
           @click="emit('close')"
           class="btn-icon btn-icon-danger"
@@ -332,6 +427,7 @@ function hideBranchSelector() {
       v-if="branchSelectorVisible"
       @close="hideBranchSelector"
     />
+
   </div>
 </template>
 
@@ -347,6 +443,15 @@ function hideBranchSelector() {
 }
 
 .git-sidebar button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.git-menu-item:hover:not(:disabled) {
+  background: var(--bg-hover);
+}
+
+.git-menu-item:disabled {
   opacity: 0.4;
   cursor: not-allowed;
 }

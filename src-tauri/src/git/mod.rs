@@ -171,6 +171,12 @@ impl GitManager {
         diff::get_commit_file_diff(&repo, commit_id, path)
     }
 
+    /// Get the full staged diff as text (for AI commit messages)
+    pub fn get_staged_diff_text(&self, id: &str) -> Result<String, String> {
+        let repo = self.open_repo(id)?;
+        diff::get_staged_diff_text(&repo)
+    }
+
     /// Get diff stats (files changed, insertions, deletions)
     pub fn get_diff_stats(&self, id: &str, staged: bool) -> Result<(u32, u32, u32), String> {
         let repo = self.open_repo(id)?;

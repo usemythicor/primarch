@@ -510,6 +510,61 @@ fn git_clean_untracked(
     state.read().git_manager.clean_untracked(&repo_id, paths)
 }
 
+// ============ AI Commands ============
+
+/// Generate a commit message from staged changes using the Anthropic API
+#[tauri::command]
+async fn generate_commit_message(
+    state: State<'_, Arc<RwLock<AppState>>>,
+    repo_id: String,
+    api_key: String,
+) -> Result<String, String> {
+    let diff_text = state.read().git_manager.get_staged_diff_text(&repo_id)?;
+
+    let client = reqwest::Client::new();
+    let response = client
+        .post("https://api.anthropic.com/v1/messages")
+        .header("x-api-key", &api_key)
+        .header("anthropic-version", "2023-06-01")
+        .header("content-type", "application/json")
+        .json(&serde_json::json!({
+            "model": "claude-haiku-4-5-20241022",
+            "max_tokens": 300,
+            "messages": [{
+                "role": "user",
+                "content": format!(
+                    "Generate a concise git commit message for the following staged diff. \
+                     Use conventional commit format (e.g., feat:, fix:, refactor:). \
+                     First line should be under 72 characters. Add a blank line and brief \
+                     body only if the changes are complex. Do not include any explanation \
+                     outside the commit message itself.\n\n```diff\n{}\n```",
+                    diff_text
+                )
+            }]
+        }))
+        .send()
+        .await
+        .map_err(|e| format!("API request failed: {}", e))?;
+
+    let status = response.status();
+    let body: serde_json::Value = response
+        .json()
+        .await
+        .map_err(|e| format!("Failed to parse API response: {}", e))?;
+
+    if !status.is_success() {
+        let error_msg = body["error"]["message"]
+            .as_str()
+            .unwrap_or("Unknown API error");
+        return Err(format!("API error: {}", error_msg));
+    }
+
+    body["content"][0]["text"]
+        .as_str()
+        .map(|s| s.trim().to_string())
+        .ok_or_else(|| "No content in API response".to_string())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let state = Arc::new(RwLock::new(AppState {
@@ -567,6 +622,8 @@ pub fn run() {
             git_discard_file,
             git_discard_all,
             git_clean_untracked,
+            // AI commands
+            generate_commit_message,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

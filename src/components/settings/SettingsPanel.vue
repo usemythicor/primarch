@@ -5,6 +5,7 @@ import {
   SwatchIcon,
   ArrowPathIcon,
   CursorArrowRaysIcon,
+  SparklesIcon,
 } from '@heroicons/vue/24/outline';
 import { useSettingsStore, accentPresets } from '../../stores/settings';
 
@@ -20,6 +21,8 @@ const fontSize = computed(() => settingsStore.fontSize);
 const cursorStyle = computed(() => settingsStore.cursorStyle);
 const cursorBlink = computed(() => settingsStore.cursorBlink);
 const currentAccent = computed(() => settingsStore.accentColor);
+
+const hasKey = computed(() => !!settingsStore.anthropicApiKey);
 
 function selectTheme(id: string) {
   settingsStore.setTheme(id);
@@ -198,6 +201,49 @@ function resetSettings() {
             }"
           ></span>
         </button>
+      </div>
+
+      <!-- AI / API Key -->
+      <div>
+        <div class="flex items-center gap-2 mb-4">
+          <SparklesIcon class="w-4 h-4" style="color: var(--accent-cyan);" />
+          <span class="text-header">AI</span>
+        </div>
+        <div class="flex items-center gap-2">
+          <input
+            v-model="settingsStore.anthropicApiKey"
+            :type="hasKey ? 'password' : 'text'"
+            :placeholder="hasKey ? '' : 'sk-ant-...'"
+            class="flex-1 px-3 py-2 transition-all duration-150"
+            style="
+              background: var(--bg-primary);
+              border: 1px solid var(--border-default);
+              color: var(--text-primary);
+              font-family: var(--font-mono);
+              font-size: 0.7rem;
+            "
+          />
+          <button
+            v-if="hasKey"
+            @click="settingsStore.setAnthropicApiKey('')"
+            class="btn-icon btn-icon-danger"
+            title="Remove key"
+          >
+            <XMarkIcon class="w-3.5 h-3.5" />
+          </button>
+        </div>
+
+        <div class="flex items-center justify-between mt-2">
+          <span style="font-size: 0.6rem; color: var(--text-muted);">Used for AI commit messages. Stored locally.</span>
+          <a
+            href="https://console.anthropic.com/settings/keys"
+            target="_blank"
+            class="text-label transition-colors"
+            style="color: var(--accent-cyan); cursor: pointer; text-decoration: none;"
+          >
+            Get key
+          </a>
+        </div>
       </div>
     </div>
 

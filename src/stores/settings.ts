@@ -12,6 +12,7 @@ interface Settings {
   cursorBlink: boolean;
   cursorStyle: 'block' | 'underline' | 'bar';
   accentColor: string;
+  anthropicApiKey: string;
 }
 
 export interface AccentPreset {
@@ -39,6 +40,7 @@ const defaultSettings: Settings = {
   cursorBlink: true,
   cursorStyle: 'block',
   accentColor: 'cyan',
+  anthropicApiKey: '',
 };
 
 export const useSettingsStore = defineStore('settings', () => {
@@ -52,6 +54,7 @@ export const useSettingsStore = defineStore('settings', () => {
   const cursorBlink = ref(savedSettings.cursorBlink);
   const cursorStyle = ref(savedSettings.cursorStyle);
   const accentColor = ref(savedSettings.accentColor);
+  const anthropicApiKey = ref(savedSettings.anthropicApiKey);
 
   // Apply accent color to CSS variables
   function applyAccentColor(id: string) {
@@ -129,6 +132,10 @@ export const useSettingsStore = defineStore('settings', () => {
     cursorStyle.value = style;
   }
 
+  function setAnthropicApiKey(key: string) {
+    anthropicApiKey.value = key;
+  }
+
   function setAccentColor(id: string) {
     if (accentPresets.find((p) => p.id === id)) {
       accentColor.value = id;
@@ -144,11 +151,12 @@ export const useSettingsStore = defineStore('settings', () => {
     cursorStyle.value = defaultSettings.cursorStyle;
     accentColor.value = defaultSettings.accentColor;
     applyAccentColor(defaultSettings.accentColor);
+    anthropicApiKey.value = defaultSettings.anthropicApiKey;
   }
 
   // Auto-save settings
   watch(
-    [themeId, fontSize, fontFamily, cursorBlink, cursorStyle, accentColor],
+    [themeId, fontSize, fontFamily, cursorBlink, cursorStyle, accentColor, anthropicApiKey],
     () => {
       saveSettings({
         themeId: themeId.value,
@@ -157,6 +165,7 @@ export const useSettingsStore = defineStore('settings', () => {
         cursorBlink: cursorBlink.value,
         cursorStyle: cursorStyle.value,
         accentColor: accentColor.value,
+        anthropicApiKey: anthropicApiKey.value,
       });
     },
     { deep: true }
@@ -170,6 +179,7 @@ export const useSettingsStore = defineStore('settings', () => {
     cursorBlink,
     cursorStyle,
     accentColor,
+    anthropicApiKey,
 
     // Computed
     currentTheme,
@@ -183,6 +193,7 @@ export const useSettingsStore = defineStore('settings', () => {
     setCursorBlink,
     setCursorStyle,
     setAccentColor,
+    setAnthropicApiKey,
     resetToDefaults,
   };
 });

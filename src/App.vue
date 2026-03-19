@@ -356,7 +356,6 @@ onUnmounted(() => {
           </template>
           <span v-else class="text-label" style="color: var(--text-muted);">No Repository</span>
         </div>
-
       </div>
     </div>
 

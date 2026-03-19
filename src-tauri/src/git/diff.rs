@@ -234,6 +234,46 @@ pub fn get_commit_file_diff(
 }
 
 /// Get full diff stats for repository
+/// Get the full staged diff as a unified diff string (for AI commit message generation)
+pub fn get_staged_diff_text(repo: &Repository) -> Result<String, String> {
+    let head_tree = repo.head().ok().and_then(|h| h.peel_to_tree().ok());
+
+    let diff = repo
+        .diff_tree_to_index(head_tree.as_ref(), None, None)
+        .map_err(|e| format!("Failed to get staged diff: {}", e))?;
+
+    let mut output = String::new();
+    diff.print(git2::DiffFormat::Patch, |_delta, _hunk, line| {
+        let prefix = match line.origin() {
+            '+' => "+",
+            '-' => "-",
+            ' ' => " ",
+            'H' => "",
+            'F' => "",
+            _ => "",
+        };
+        // Stop collecting if we've hit the size limit
+        if output.len() < 20_000 {
+            output.push_str(prefix);
+            if let Ok(content) = std::str::from_utf8(line.content()) {
+                output.push_str(content);
+            }
+        }
+        true
+    })
+    .map_err(|e| format!("Failed to print diff: {}", e))?;
+
+    if output.len() >= 20_000 {
+        output.push_str("\n... (diff truncated)\n");
+    }
+
+    if output.is_empty() {
+        return Err("No staged changes to describe.".to_string());
+    }
+
+    Ok(output)
+}
+
 pub fn get_diff_stats(repo: &Repository, staged: bool) -> Result<(u32, u32, u32), String> {
     let diff = if staged {
         let head_tree = repo.head().ok().and_then(|h| h.peel_to_tree().ok());

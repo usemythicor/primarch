@@ -1,9 +1,33 @@
 <script setup lang="ts">
-import { computed } from 'vue';
-import { CheckIcon } from '@heroicons/vue/24/outline';
+import { ref, computed } from 'vue';
+import { invoke } from '@tauri-apps/api/core';
+import { CheckIcon, SparklesIcon } from '@heroicons/vue/24/outline';
 import { useGitStore } from '../../stores/git';
+import { useSettingsStore } from '../../stores/settings';
 
 const gitStore = useGitStore();
+const settingsStore = useSettingsStore();
+
+const isGenerating = ref(false);
+const canGenerate = computed(
+  () => settingsStore.anthropicApiKey && gitStore.stagedFiles.length > 0 && !isGenerating.value
+);
+
+async function generateCommitMessage() {
+  if (!canGenerate.value || !gitStore.repoId) return;
+  isGenerating.value = true;
+  try {
+    const message = await invoke<string>('generate_commit_message', {
+      repoId: gitStore.repoId,
+      apiKey: settingsStore.anthropicApiKey,
+    });
+    gitStore.commitMessage = message;
+  } catch (e) {
+    gitStore.commitMessage = `Error: ${e}`;
+  } finally {
+    isGenerating.value = false;
+  }
+}
 
 const commitMessage = computed({
   get: () => gitStore.commitMessage,
@@ -34,6 +58,21 @@ function handleKeydown(e: KeyboardEvent) {
     class="commit-panel px-3 py-3"
     style="border-top: 1px solid var(--border-subtle); background: var(--bg-tertiary);"
   >
+    <!-- Header with AI generate -->
+    <div class="flex items-center justify-between mb-1">
+      <span class="text-label" style="color: var(--text-muted);">Message</span>
+      <button
+        @click="generateCommitMessage"
+        :disabled="!canGenerate"
+        class="generate-btn flex items-center gap-1 px-1.5 py-0.5"
+        :class="{ 'disabled': !canGenerate, 'loading': isGenerating }"
+        :title="settingsStore.anthropicApiKey ? 'Generate commit message with AI' : 'Set Anthropic API key in Settings'"
+      >
+        <SparklesIcon class="w-3 h-3" :class="{ 'animate-pulse': isGenerating }" />
+        <span class="text-label" style="letter-spacing: 0.05em;">{{ isGenerating ? 'GENERATING...' : 'AI' }}</span>
+      </button>
+    </div>
+
     <!-- Commit message input -->
     <textarea
       v-model="commitMessage"
@@ -112,5 +151,30 @@ function handleKeydown(e: KeyboardEvent) {
 .commit-btn.loading {
   opacity: 0.7;
   cursor: wait;
+}
+
+.generate-btn {
+  background: transparent;
+  border: 1px solid var(--border-subtle);
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.generate-btn:hover:not(.disabled) {
+  border-color: var(--accent-cyan);
+  color: var(--accent-cyan);
+}
+
+.generate-btn.disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+.generate-btn.loading {
+  opacity: 0.7;
+  cursor: wait;
+  border-color: var(--accent-cyan);
+  color: var(--accent-cyan);
 }
 </style>
