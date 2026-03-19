@@ -26,7 +26,7 @@ impl TerminalSession {
         let id = uuid::Uuid::new_v4().to_string();
 
         // Determine shell to use
-        let shell = shell.unwrap_or_else(|| detect_default_shell());
+        let shell = shell.unwrap_or_else(detect_default_shell);
 
         // Determine working directory - default to user home directory
         let cwd = cwd.unwrap_or_else(|| {
@@ -224,8 +224,9 @@ unsafe fn get_process_cwd_internal(
         return Err(format!("NtQueryInformationProcess failed: {:#x}", status));
     }
 
-    // Read PEB
+    // Read PEB (Process Environment Block - Windows standard term)
     #[repr(C)]
+    #[allow(clippy::upper_case_acronyms)]
     struct PEB {
         reserved1: [u8; 2],
         being_debugged: u8,

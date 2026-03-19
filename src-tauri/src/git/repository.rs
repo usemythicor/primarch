@@ -130,7 +130,7 @@ fn get_branch_tracking_info(repo: &Repository) -> (Option<String>, Option<String
 
     // Get upstream branch
     let branch = match repo.find_branch(
-        branch_name.as_ref().map(|s| s.as_str()).unwrap_or(""),
+        branch_name.as_deref().unwrap_or(""),
         BranchType::Local,
     ) {
         Ok(b) => b,
@@ -308,8 +308,8 @@ pub fn unstage_file(repo: &Repository, path: &str) -> Result<(), String> {
         .map_err(|e| format!("Failed to get HEAD commit: {}", e))?;
 
     repo.reset_default(
-        Some(&head_commit.as_object()),
-        &[std::path::Path::new(path)],
+        Some(head_commit.as_object()),
+        [std::path::Path::new(path)],
     )
     .map_err(|e| format!("Failed to unstage file: {}", e))?;
 
