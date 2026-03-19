@@ -37,6 +37,8 @@ pub enum SplitDirection {
 }
 
 impl Workspace {
+    /// Create a new workspace with generated ID and timestamps
+    #[allow(dead_code)] // Available for server-side workspace creation
     pub fn new(name: String, layout: LayoutNode) -> Self {
         let now = chrono_lite::Utc::now();
         Self {
@@ -62,6 +64,7 @@ impl Default for LayoutNode {
 }
 
 /// Lightweight datetime for timestamps
+#[allow(dead_code)]
 mod chrono_lite {
     pub struct Utc;
 
@@ -72,7 +75,6 @@ mod chrono_lite {
                 .duration_since(std::time::UNIX_EPOCH)
                 .unwrap();
             let secs = duration.as_secs();
-            // Approximate: 2024-01-01 is ~1704067200
             format!("{}Z", secs)
         }
     }

@@ -7,11 +7,16 @@ use std::sync::Arc;
 #[derive(Clone)]
 pub struct TerminalSession {
     pub id: String,
+    #[allow(dead_code)] // Retained for debugging and future shell info display
     pub shell: String,
+    #[allow(dead_code)] // Retained for workspace restoration
     pub initial_cwd: String,
+    /// Current working directory (updated via OSC sequences or process queries)
+    current_cwd: Arc<Mutex<String>>,
     pty_pair: Arc<Mutex<PtyPair>>,
     writer: Arc<Mutex<Box<dyn Write + Send>>>,
     reader: Arc<Mutex<Box<dyn Read + Send>>>,
+    #[allow(dead_code)] // Kept alive to maintain process lifecycle
     child: Arc<Mutex<Box<dyn Child + Send + Sync>>>,
 }
 
@@ -23,14 +28,14 @@ impl TerminalSession {
         // Determine shell to use
         let shell = shell.unwrap_or_else(|| detect_default_shell());
 
-        // Determine working directory
+        // Determine working directory - default to user home directory
         let cwd = cwd.unwrap_or_else(|| {
-            std::env::current_dir()
+            dirs::home_dir()
                 .map(|p| p.to_string_lossy().to_string())
-                .unwrap_or_else(|_| {
-                    dirs::home_dir()
+                .unwrap_or_else(|| {
+                    std::env::current_dir()
                         .map(|p| p.to_string_lossy().to_string())
-                        .unwrap_or_else(|| "C:\\".to_string())
+                        .unwrap_or_else(|_| "C:\\".to_string())
                 })
         });
 
@@ -47,9 +52,28 @@ impl TerminalSession {
             })
             .map_err(|e| format!("Failed to create PTY: {}", e))?;
 
-        // Build command
-        let mut cmd = CommandBuilder::new(&shell);
+        // Build command - for PowerShell, inject a custom prompt that emits OSC 9;9 sequences
+        let is_powershell = shell.to_lowercase().contains("powershell")
+            || shell.to_lowercase().contains("pwsh");
+
+        let mut cmd = if is_powershell {
+            let mut c = CommandBuilder::new(&shell);
+            c.arg("-NoExit");
+            c.arg("-Command");
+            // Define a prompt function that emits OSC 9;9 with current directory
+            // OSC 9;9;path ST where ST is ESC \ (0x1b 0x5c)
+            c.arg(r#"function prompt { $p = $executionContext.SessionState.Path.CurrentLocation.Path; $e = [char]27; "$e]9;9;$p$e\PS $p> " }"#);
+            c
+        } else {
+            CommandBuilder::new(&shell)
+        };
+
         cmd.cwd(&cwd);
+
+        // Set environment variables for shell integration (OSC sequences)
+        // This enables PowerShell 7.2+ to emit OSC 9;9 sequences with current directory
+        cmd.env("TERM_PROGRAM", "MythicorTerminal");
+        cmd.env("TERM_PROGRAM_VERSION", "0.1.0");
 
         // Spawn the shell
         let child = pty_pair
@@ -71,7 +95,8 @@ impl TerminalSession {
         Ok(Self {
             id,
             shell,
-            initial_cwd: cwd,
+            initial_cwd: cwd.clone(),
+            current_cwd: Arc::new(Mutex::new(cwd)),
             pty_pair: Arc::new(Mutex::new(pty_pair)),
             writer: Arc::new(Mutex::new(writer)),
             reader: Arc::new(Mutex::new(reader)),
@@ -88,6 +113,7 @@ impl TerminalSession {
     }
 
     /// Read data from the terminal's stdout
+    #[allow(dead_code)] // Available for direct reading, currently using get_reader() instead
     pub fn read(&self, buf: &mut [u8]) -> Result<usize, String> {
         self.reader
             .lock()
@@ -121,59 +147,59 @@ impl TerminalSession {
     }
 
     /// Get the process ID of the shell
+    #[allow(dead_code)] // Used by try_get_process_cwd for fallback CWD detection
     pub fn get_pid(&self) -> Option<u32> {
         self.child.lock().process_id()
     }
 
-    /// Get the current working directory of the shell process
-    #[cfg(windows)]
+    /// Update the current working directory (called when OSC sequences are parsed)
+    pub fn set_cwd(&self, cwd: String) {
+        *self.current_cwd.lock() = cwd;
+    }
+
+    /// Get the current working directory
+    /// Returns the tracked CWD (from OSC sequences) or falls back to initial_cwd
     pub fn get_cwd(&self) -> Result<String, String> {
+        Ok(self.current_cwd.lock().clone())
+    }
+
+    /// Try to get CWD from process memory (Windows fallback)
+    #[cfg(windows)]
+    #[allow(dead_code)] // Reserved for fallback when OSC sequences unavailable
+    pub fn try_get_process_cwd(&self) -> Option<String> {
         use windows::Win32::Foundation::CloseHandle;
         use windows::Win32::System::Threading::{
             OpenProcess, PROCESS_QUERY_INFORMATION, PROCESS_VM_READ,
         };
 
-        // Try to get actual CWD from process memory
-        if let Some(pid) = self.get_pid() {
-            let result = unsafe {
-                // Open the process
-                if let Ok(process_handle) = OpenProcess(
-                    PROCESS_QUERY_INFORMATION | PROCESS_VM_READ,
-                    false,
-                    pid,
-                ) {
-                    let result = get_process_cwd_internal(process_handle);
-                    let _ = CloseHandle(process_handle);
-                    result
-                } else {
-                    Err("Failed to open process".to_string())
-                }
-            };
+        let pid = self.get_pid()?;
 
-            // If we got the CWD successfully, return it
-            if let Ok(cwd) = result {
-                return Ok(cwd);
-            }
+        unsafe {
+            let process_handle = OpenProcess(
+                PROCESS_QUERY_INFORMATION | PROCESS_VM_READ,
+                false,
+                pid,
+            ).ok()?;
+
+            let result = get_process_cwd_internal(process_handle);
+            let _ = CloseHandle(process_handle);
+            result.ok()
         }
-
-        // Fall back to initial_cwd if we couldn't get the actual CWD
-        Ok(self.initial_cwd.clone())
     }
 
     #[cfg(not(windows))]
-    pub fn get_cwd(&self) -> Result<String, String> {
+    #[allow(dead_code)] // Reserved for fallback when OSC sequences unavailable
+    pub fn try_get_process_cwd(&self) -> Option<String> {
         // On Unix, read /proc/<pid>/cwd
-        if let Some(pid) = self.get_pid() {
-            std::fs::read_link(format!("/proc/{}/cwd", pid))
-                .map(|p| p.to_string_lossy().to_string())
-                .map_err(|e| format!("Failed to read cwd: {}", e))
-        } else {
-            Ok(self.initial_cwd.clone())
-        }
+        let pid = self.get_pid()?;
+        std::fs::read_link(format!("/proc/{}/cwd", pid))
+            .map(|p| p.to_string_lossy().to_string())
+            .ok()
     }
 }
 
 #[cfg(windows)]
+#[allow(dead_code)] // Used by try_get_process_cwd
 unsafe fn get_process_cwd_internal(
     process_handle: windows::Win32::Foundation::HANDLE,
 ) -> Result<String, String> {

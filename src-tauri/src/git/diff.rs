@@ -3,6 +3,7 @@ use serde::Serialize;
 
 /// Represents a complete file diff
 #[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct FileDiff {
     pub path: String,
     pub old_path: Option<String>,
@@ -14,6 +15,7 @@ pub struct FileDiff {
 
 /// Represents a single hunk in a diff
 #[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct DiffHunkData {
     pub old_start: u32,
     pub old_lines: u32,
@@ -25,6 +27,7 @@ pub struct DiffHunkData {
 
 /// Represents a single line in a diff
 #[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct DiffLineData {
     pub origin: char,
     pub old_lineno: Option<u32>,

@@ -4,7 +4,7 @@ pub mod history;
 pub mod watcher;
 
 pub use diff::FileDiff;
-pub use history::{CommitInfo, RefInfo};
+pub use history::CommitInfo;
 pub use watcher::WatcherManager;
 
 use git2::Repository;
@@ -16,6 +16,7 @@ use std::sync::Arc;
 
 // Status types returned to frontend
 #[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct GitStatus {
     pub branch: Option<String>,
     pub upstream: Option<String>,
@@ -28,6 +29,7 @@ pub struct GitStatus {
 }
 
 #[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct FileStatus {
     pub path: String,
     pub status: FileStatusType,
@@ -40,11 +42,13 @@ pub enum FileStatusType {
     Added,
     Deleted,
     Renamed,
+    #[allow(dead_code)] // Reserved for future use
     Copied,
     TypeChanged,
 }
 
 #[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct BranchInfo {
     pub name: String,
     pub is_head: bool,
@@ -204,6 +208,46 @@ impl GitManager {
     pub fn get_commit_files(&self, id: &str, commit_id: &str) -> Result<Vec<String>, String> {
         let repo = self.open_repo(id)?;
         history::get_commit_files(&repo, commit_id)
+    }
+
+    // ============ Branch Operations ============
+
+    /// Checkout an existing branch
+    pub fn checkout_branch(&self, id: &str, branch_name: &str) -> Result<(), String> {
+        let repo = self.open_repo(id)?;
+        repository::checkout_branch(&repo, branch_name)
+    }
+
+    /// Create a new branch
+    pub fn create_branch(&self, id: &str, branch_name: &str, checkout: bool) -> Result<(), String> {
+        let repo = self.open_repo(id)?;
+        repository::create_branch(&repo, branch_name, checkout)
+    }
+
+    /// Delete a branch
+    pub fn delete_branch(&self, id: &str, branch_name: &str) -> Result<(), String> {
+        let repo = self.open_repo(id)?;
+        repository::delete_branch(&repo, branch_name)
+    }
+
+    // ============ Discard Operations ============
+
+    /// Discard changes in a single file
+    pub fn discard_file(&self, id: &str, path: &str) -> Result<(), String> {
+        let repo = self.open_repo(id)?;
+        repository::discard_file(&repo, path)
+    }
+
+    /// Discard all unstaged changes
+    pub fn discard_all_unstaged(&self, id: &str) -> Result<(), String> {
+        let repo = self.open_repo(id)?;
+        repository::discard_all_unstaged(&repo)
+    }
+
+    /// Clean untracked files
+    pub fn clean_untracked(&self, id: &str, paths: Option<Vec<String>>) -> Result<u32, String> {
+        let repo = self.open_repo(id)?;
+        repository::clean_untracked(&repo, paths)
     }
 }
 

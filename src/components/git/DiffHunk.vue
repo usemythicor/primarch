@@ -25,8 +25,8 @@ const splitLines = computed(() => {
     if (line.origin === ' ') {
       // Context line - same on both sides
       pairs.push({
-        oldLine: { lineno: line.old_lineno ?? null, content: line.content, type: 'context' },
-        newLine: { lineno: line.new_lineno ?? null, content: line.content, type: 'context' },
+        oldLine: { lineno: line.oldLineno ?? null, content: line.content, type: 'context' },
+        newLine: { lineno: line.newLineno ?? null, content: line.content, type: 'context' },
       });
       i++;
     } else if (line.origin === '-') {
@@ -34,14 +34,14 @@ const splitLines = computed(() => {
       const nextLine = lines[i + 1];
       if (nextLine && nextLine.origin === '+') {
         pairs.push({
-          oldLine: { lineno: line.old_lineno ?? null, content: line.content, type: 'deleted' },
-          newLine: { lineno: nextLine.new_lineno ?? null, content: nextLine.content, type: 'added' },
+          oldLine: { lineno: line.oldLineno ?? null, content: line.content, type: 'deleted' },
+          newLine: { lineno: nextLine.newLineno ?? null, content: nextLine.content, type: 'added' },
         });
         i += 2;
       } else {
         // Just a deletion
         pairs.push({
-          oldLine: { lineno: line.old_lineno ?? null, content: line.content, type: 'deleted' },
+          oldLine: { lineno: line.oldLineno ?? null, content: line.content, type: 'deleted' },
           newLine: null,
         });
         i++;
@@ -50,7 +50,7 @@ const splitLines = computed(() => {
       // Addition without paired deletion
       pairs.push({
         oldLine: null,
-        newLine: { lineno: line.new_lineno ?? null, content: line.content, type: 'added' },
+        newLine: { lineno: line.newLineno ?? null, content: line.content, type: 'added' },
       });
       i++;
     } else {
@@ -81,8 +81,8 @@ const splitLines = computed(() => {
           'line-context': line.origin === ' ',
         }"
       >
-        <span class="line-number old-lineno">{{ line.old_lineno ?? '' }}</span>
-        <span class="line-number new-lineno">{{ line.new_lineno ?? '' }}</span>
+        <span class="line-number old-lineno">{{ line.oldLineno ?? '' }}</span>
+        <span class="line-number new-lineno">{{ line.newLineno ?? '' }}</span>
         <span class="line-origin">{{ line.origin }}</span>
         <span class="line-content">{{ line.content }}</span>
       </div>

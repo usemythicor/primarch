@@ -2,7 +2,8 @@ import { defineStore } from 'pinia';
 import { ref, computed } from 'vue';
 import { invoke } from '@tauri-apps/api/core';
 import { listen, UnlistenFn } from '@tauri-apps/api/event';
-import type { GitStatus, FileDiff, CommitInfo } from '../types';
+import type { GitStatus, FileDiff, CommitInfo, BranchInfo } from '../types';
+import { useLayoutStore } from './layout';
 
 export const useGitStore = defineStore('git', () => {
   // === State ===
@@ -40,8 +41,22 @@ export const useGitStore = defineStore('git', () => {
   const isPushing = ref(false);
   const remoteMessage = ref<string | null>(null);
 
+  // Branch state
+  const branches = ref<BranchInfo[]>([]);
+  const branchesLoading = ref(false);
+  const branchSelectorVisible = ref(false);
+  const isCheckingOut = ref(false);
+  const isCreatingBranch = ref(false);
+
+  // Discard state
+  const isDiscarding = ref(false);
+
   // Watcher state
   let watcherUnlisten: UnlistenFn | null = null;
+
+  // CWD watcher state
+  let cwdWatcherInterval: ReturnType<typeof setInterval> | null = null;
+  let lastCheckedCwd: string | null = null;
 
   // === Computed ===
   const hasRepo = computed(() => repoId.value !== null);
@@ -87,29 +102,22 @@ export const useGitStore = defineStore('git', () => {
 
   // Repository management
   async function openRepository(path: string) {
-    console.log('[GitStore] openRepository called with path:', path);
     isLoading.value = true;
     error.value = null;
 
     try {
       // Discover .git directory from path
-      console.log('[GitStore] Calling git_discover_repo...');
       const discoveredPath = await invoke<string>('git_discover_repo', { path });
-      console.log('[GitStore] Discovered repo path:', discoveredPath);
 
       repoId.value = await invoke<string>('git_open_repo', { path: discoveredPath });
-      console.log('[GitStore] Opened repo with ID:', repoId.value);
       repoPath.value = discoveredPath;
 
       // Load initial status
       await refreshStatus();
-      console.log('[GitStore] Status loaded, branch:', status.value?.branch);
 
       // Start file watcher
       await startWatcher();
-      console.log('[GitStore] Watcher started');
     } catch (e) {
-      console.error('[GitStore] Failed to open repository:', e);
       error.value = `Failed to open repository: ${e}`;
       repoId.value = null;
       repoPath.value = null;
@@ -126,8 +134,8 @@ export const useGitStore = defineStore('git', () => {
 
       try {
         await invoke('git_close_repo', { repoId: repoId.value });
-      } catch (e) {
-        console.warn('Failed to close repo:', e);
+      } catch {
+        // Ignore close errors - repo may already be closed
       }
       repoId.value = null;
       repoPath.value = null;
@@ -154,8 +162,8 @@ export const useGitStore = defineStore('git', () => {
         // Refresh status when files change
         refreshStatus();
       });
-    } catch (e) {
-      console.warn('Failed to start watcher:', e);
+    } catch {
+      // Watcher is optional - continue without it
     }
   }
 
@@ -168,8 +176,8 @@ export const useGitStore = defineStore('git', () => {
     if (repoId.value) {
       try {
         await invoke('git_stop_watcher', { repoId: repoId.value });
-      } catch (e) {
-        console.warn('Failed to stop watcher:', e);
+      } catch {
+        // Ignore stop errors - watcher may not exist
       }
     }
   }
@@ -413,6 +421,204 @@ export const useGitStore = defineStore('git', () => {
     error.value = null;
   }
 
+  // ============ Branch Operations ============
+
+  async function loadBranches() {
+    if (!repoId.value) return;
+
+    branchesLoading.value = true;
+
+    try {
+      branches.value = await invoke<BranchInfo[]>('git_list_branches', {
+        repoId: repoId.value,
+      });
+    } catch (e) {
+      error.value = `Failed to load branches: ${e}`;
+    } finally {
+      branchesLoading.value = false;
+    }
+  }
+
+  async function checkoutBranch(branchName: string) {
+    if (!repoId.value || isCheckingOut.value) return;
+
+    isCheckingOut.value = true;
+    error.value = null;
+
+    try {
+      await invoke('git_checkout_branch', {
+        repoId: repoId.value,
+        branchName,
+      });
+      await refreshStatus();
+      await loadBranches();
+      branchSelectorVisible.value = false;
+    } catch (e) {
+      error.value = `Failed to checkout branch: ${e}`;
+    } finally {
+      isCheckingOut.value = false;
+    }
+  }
+
+  async function createBranch(branchName: string, checkout: boolean = true) {
+    if (!repoId.value || isCreatingBranch.value) return;
+
+    isCreatingBranch.value = true;
+    error.value = null;
+
+    try {
+      await invoke('git_create_branch', {
+        repoId: repoId.value,
+        branchName,
+        checkout,
+      });
+      await refreshStatus();
+      await loadBranches();
+      branchSelectorVisible.value = false;
+    } catch (e) {
+      error.value = `Failed to create branch: ${e}`;
+    } finally {
+      isCreatingBranch.value = false;
+    }
+  }
+
+  async function deleteBranch(branchName: string) {
+    if (!repoId.value) return;
+
+    error.value = null;
+
+    try {
+      await invoke('git_delete_branch', {
+        repoId: repoId.value,
+        branchName,
+      });
+      await loadBranches();
+    } catch (e) {
+      error.value = `Failed to delete branch: ${e}`;
+    }
+  }
+
+  function showBranchSelector() {
+    branchSelectorVisible.value = true;
+    loadBranches();
+  }
+
+  function hideBranchSelector() {
+    branchSelectorVisible.value = false;
+  }
+
+  // ============ Discard Operations ============
+
+  async function discardFile(path: string) {
+    if (!repoId.value || isDiscarding.value) return;
+
+    isDiscarding.value = true;
+    error.value = null;
+
+    try {
+      await invoke('git_discard_file', {
+        repoId: repoId.value,
+        path,
+      });
+      await refreshStatus();
+    } catch (e) {
+      error.value = `Failed to discard changes: ${e}`;
+    } finally {
+      isDiscarding.value = false;
+    }
+  }
+
+  async function discardAll() {
+    if (!repoId.value || isDiscarding.value) return;
+
+    isDiscarding.value = true;
+    error.value = null;
+
+    try {
+      await invoke('git_discard_all', {
+        repoId: repoId.value,
+      });
+      await refreshStatus();
+    } catch (e) {
+      error.value = `Failed to discard all changes: ${e}`;
+    } finally {
+      isDiscarding.value = false;
+    }
+  }
+
+  async function cleanUntracked(paths?: string[]) {
+    if (!repoId.value || isDiscarding.value) return;
+
+    isDiscarding.value = true;
+    error.value = null;
+
+    try {
+      const removed = await invoke<number>('git_clean_untracked', {
+        repoId: repoId.value,
+        paths: paths ?? null,
+      });
+      remoteMessage.value = `Removed ${removed} untracked file${removed !== 1 ? 's' : ''}`;
+      await refreshStatus();
+    } catch (e) {
+      error.value = `Failed to clean untracked files: ${e}`;
+    } finally {
+      isDiscarding.value = false;
+    }
+  }
+
+  // CWD watcher - monitors active terminal directory for git repo changes
+  async function checkActiveCwd() {
+    const layoutStore = useLayoutStore();
+    const activePane = layoutStore.activePane;
+    if (!activePane) return;
+
+    const sessionId = layoutStore.getSessionId(activePane);
+    if (!sessionId) return;
+
+    try {
+      const cwd = await invoke<string>('get_terminal_cwd', { sessionId });
+
+      // Skip if same as last check
+      if (cwd === lastCheckedCwd) return;
+      lastCheckedCwd = cwd;
+
+      // Try to discover git repo from new CWD
+      try {
+        const discoveredPath = await invoke<string>('git_discover_repo', { path: cwd });
+
+        // If different repo than current, switch to it
+        if (discoveredPath !== repoPath.value) {
+          await closeRepository();
+          await openRepository(cwd);
+        }
+      } catch {
+        // Not a git repo - close current repo if any
+        if (hasRepo.value) {
+          await closeRepository();
+        }
+      }
+    } catch {
+      // Failed to get CWD, ignore
+    }
+  }
+
+  function startCwdWatcher() {
+    if (cwdWatcherInterval) return;
+
+    // Check every 1 second
+    cwdWatcherInterval = setInterval(checkActiveCwd, 1000);
+
+    // Also check immediately
+    checkActiveCwd();
+  }
+
+  function stopCwdWatcher() {
+    if (cwdWatcherInterval) {
+      clearInterval(cwdWatcherInterval);
+      cwdWatcherInterval = null;
+    }
+  }
+
   return {
     // State
     repoId,
@@ -438,6 +644,12 @@ export const useGitStore = defineStore('git', () => {
     isPulling,
     isPushing,
     remoteMessage,
+    branches,
+    branchesLoading,
+    branchSelectorVisible,
+    isCheckingOut,
+    isCreatingBranch,
+    isDiscarding,
 
     // Computed
     hasRepo,
@@ -479,5 +691,22 @@ export const useGitStore = defineStore('git', () => {
     selectCommit,
     clearSelectedCommit,
     clearError,
+
+    // Branch operations
+    loadBranches,
+    checkoutBranch,
+    createBranch,
+    deleteBranch,
+    showBranchSelector,
+    hideBranchSelector,
+
+    // Discard operations
+    discardFile,
+    discardAll,
+    cleanUntracked,
+
+    // CWD watcher
+    startCwdWatcher,
+    stopCwdWatcher,
   };
 });

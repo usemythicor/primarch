@@ -99,21 +99,15 @@ onMounted(async () => {
         if (!cwd && sessionId.value) {
           try {
             cwd = await invoke<string>('get_terminal_cwd', { sessionId: sessionId.value });
-            console.log('[Git] Got terminal CWD:', cwd);
-          } catch (e) {
-            console.warn('[Git] Could not get terminal CWD:', e);
+          } catch {
+            // CWD not available yet
           }
         }
 
         if (cwd) {
-          console.log('[Git] Trying to detect git repo from:', cwd);
-          gitStore.openRepository(cwd).then(() => {
-            console.log('[Git] Successfully opened repository');
-          }).catch((e) => {
-            console.log('[Git] Not a git repo or failed to open:', e);
+          gitStore.openRepository(cwd).catch(() => {
+            // Not a git repo or failed to open - this is expected for non-git directories
           });
-        } else {
-          console.log('[Git] No CWD available for git detection');
         }
       };
 
@@ -132,8 +126,8 @@ onMounted(async () => {
         isConnected.value = false;
         emit('close');
       },
-      (error) => {
-        console.error('Terminal error:', error);
+      () => {
+        // Terminal read error - session may have ended
       }
     );
 
@@ -160,7 +154,7 @@ onMounted(async () => {
       await write(sessionId.value, props.startupCommand + '\r');
     }
   } catch (error) {
-    console.error('Failed to create terminal session:', error);
+    // Display error in the terminal itself so user can see it
     terminal.writeln(`\x1b[31mFailed to create terminal session: ${error}\x1b[0m`);
   }
 

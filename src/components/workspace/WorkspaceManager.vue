@@ -30,8 +30,8 @@ async function saveWorkspace() {
     await workspaceStore.saveCurrentLayout(newWorkspaceName.value.trim());
     newWorkspaceName.value = '';
     showSaveForm.value = false;
-  } catch (error) {
-    console.error('Failed to save workspace:', error);
+  } catch {
+    // Error is displayed via workspaceStore.error
   } finally {
     isSaving.value = false;
   }
@@ -41,8 +41,8 @@ async function loadWorkspace(id: string) {
   try {
     await workspaceStore.loadWorkspace(id);
     emit('close');
-  } catch (error) {
-    console.error('Failed to load workspace:', error);
+  } catch {
+    // Error is displayed via workspaceStore.error
   }
 }
 
@@ -51,8 +51,8 @@ async function deleteWorkspace(id: string, event: Event) {
   if (confirm('Delete this workspace?')) {
     try {
       await workspaceStore.deleteWorkspace(id);
-    } catch (error) {
-      console.error('Failed to delete workspace:', error);
+    } catch {
+      // Error is displayed via workspaceStore.error
     }
   }
 }

@@ -123,10 +123,13 @@ onMounted(() => {
   // Set initial background
   document.documentElement.style.background = terminalBg.value;
   document.body.style.background = terminalBg.value;
+  // Start watching for CWD changes to update git
+  gitStore.startCwdWatcher();
 });
 
 onUnmounted(() => {
   window.removeEventListener('keydown', handleKeydown);
+  gitStore.stopCwdWatcher();
 });
 </script>
 

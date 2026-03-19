@@ -81,9 +81,9 @@ function getRefColor(refType: string): string {
             :key="ref.name"
             class="ref-badge px-1.5 py-0.5 text-label"
             :style="{
-              background: `${getRefColor(ref.ref_type)}20`,
-              color: getRefColor(ref.ref_type),
-              border: ref.is_head ? `1px solid ${getRefColor(ref.ref_type)}` : 'none',
+              background: `${getRefColor(ref.refType)}20`,
+              color: getRefColor(ref.refType),
+              border: ref.isHead ? `1px solid ${getRefColor(ref.refType)}` : 'none',
             }"
           >
             {{ ref.name }}
@@ -106,10 +106,10 @@ function getRefColor(refType: string): string {
             <!-- Meta -->
             <div class="flex items-center gap-2 mt-0.5">
               <span class="text-label" style="color: var(--accent-cyan); font-family: var(--font-mono);">
-                {{ commit.short_id }}
+                {{ commit.shortId }}
               </span>
               <span class="text-label" style="color: var(--text-muted);">
-                {{ commit.author_name }}
+                {{ commit.authorName }}
               </span>
               <span class="text-label" style="color: var(--text-muted);">
                 {{ formatDate(commit.timestamp) }}

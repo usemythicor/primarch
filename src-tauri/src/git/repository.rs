@@ -280,9 +280,6 @@ pub fn unstage_file(repo: &Repository, path: &str) -> Result<(), String> {
     let head_commit = head.peel_to_commit()
         .map_err(|e| format!("Failed to get HEAD commit: {}", e))?;
 
-    let head_tree = head_commit.tree()
-        .map_err(|e| format!("Failed to get HEAD tree: {}", e))?;
-
     repo.reset_default(Some(&head_commit.as_object()), &[std::path::Path::new(path)])
         .map_err(|e| format!("Failed to unstage file: {}", e))?;
 
@@ -347,11 +344,80 @@ pub fn create_commit(repo: &Repository, message: &str) -> Result<String, String>
     Ok(oid.to_string())
 }
 
+/// Get credentials from git credential helper (supports Git Credential Manager)
+fn get_credentials_from_helper(url: &str) -> Option<(String, String)> {
+    use std::process::{Command, Stdio};
+    use std::io::Write;
+
+    // Parse URL to extract protocol and host (e.g., "https://github.com/user/repo.git")
+    let protocol = if url.starts_with("https://") {
+        "https"
+    } else if url.starts_with("http://") {
+        "http"
+    } else {
+        return None;
+    };
+
+    // Extract host from URL
+    let after_protocol = url.strip_prefix(&format!("{}://", protocol))?;
+    let host = after_protocol.split('/').next()?;
+
+    let input = format!("protocol={}\nhost={}\n\n", protocol, host);
+
+    #[cfg(windows)]
+    use std::os::windows::process::CommandExt;
+
+    #[cfg(windows)]
+    let child = Command::new("git")
+        .args(["credential", "fill"])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .creation_flags(0x08000000) // CREATE_NO_WINDOW
+        .spawn();
+
+    #[cfg(not(windows))]
+    let child = Command::new("git")
+        .args(["credential", "fill"])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .spawn();
+
+    let mut child = child.ok()?;
+
+    if let Some(mut stdin) = child.stdin.take() {
+        stdin.write_all(input.as_bytes()).ok()?;
+    }
+
+    let output = child.wait_with_output().ok()?;
+    if !output.status.success() {
+        return None;
+    }
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let mut username = None;
+    let mut password = None;
+
+    for line in stdout.lines() {
+        if let Some(user) = line.strip_prefix("username=") {
+            username = Some(user.to_string());
+        } else if let Some(pass) = line.strip_prefix("password=") {
+            password = Some(pass.to_string());
+        }
+    }
+
+    match (username, password) {
+        (Some(u), Some(p)) => Some((u, p)),
+        _ => None,
+    }
+}
+
 /// Create remote callbacks with credential handling
 fn create_remote_callbacks<'a>() -> RemoteCallbacks<'a> {
     let mut callbacks = RemoteCallbacks::new();
 
-    callbacks.credentials(|_url, username_from_url, allowed_types| {
+    callbacks.credentials(|url, username_from_url, allowed_types| {
         // Try SSH agent first
         if allowed_types.contains(CredentialType::SSH_KEY) {
             if let Some(username) = username_from_url {
@@ -361,10 +427,10 @@ fn create_remote_callbacks<'a>() -> RemoteCallbacks<'a> {
             }
         }
 
-        // Try default credentials (git credential manager)
-        if allowed_types.contains(CredentialType::DEFAULT) {
-            if let Ok(cred) = Cred::default() {
-                return Ok(cred);
+        // Try git credential helper (Git Credential Manager) for HTTPS
+        if allowed_types.contains(CredentialType::USER_PASS_PLAINTEXT) {
+            if let Some((username, password)) = get_credentials_from_helper(url) {
+                return Cred::userpass_plaintext(&username, &password);
             }
         }
 
@@ -515,4 +581,181 @@ pub fn list_remotes(repo: &Repository) -> Result<Vec<String>, String> {
     Ok(remotes.iter()
         .filter_map(|r| r.map(|s| s.to_string()))
         .collect())
+}
+
+// ============ Branch Operations ============
+
+/// Checkout an existing branch
+pub fn checkout_branch(repo: &Repository, branch_name: &str) -> Result<(), String> {
+    // Verify the branch exists
+    repo.find_branch(branch_name, BranchType::Local)
+        .map_err(|e| format!("Branch '{}' not found: {}", branch_name, e))?;
+
+    // Set HEAD to the branch
+    let refname = format!("refs/heads/{}", branch_name);
+    repo.set_head(&refname)
+        .map_err(|e| format!("Failed to set HEAD: {}", e))?;
+
+    // Checkout the working directory
+    repo.checkout_head(Some(
+        git2::build::CheckoutBuilder::default()
+            .safe()
+            .recreate_missing(true)
+    )).map_err(|e| format!("Failed to checkout: {}", e))?;
+
+    Ok(())
+}
+
+/// Create a new branch
+pub fn create_branch(repo: &Repository, branch_name: &str, checkout: bool) -> Result<(), String> {
+    // Get HEAD commit
+    let head = repo.head()
+        .map_err(|e| format!("Failed to get HEAD: {}", e))?;
+
+    let commit = head.peel_to_commit()
+        .map_err(|e| format!("Failed to get HEAD commit: {}", e))?;
+
+    // Create the branch
+    repo.branch(branch_name, &commit, false)
+        .map_err(|e| format!("Failed to create branch '{}': {}", branch_name, e))?;
+
+    // Optionally checkout
+    if checkout {
+        checkout_branch(repo, branch_name)?;
+    }
+
+    Ok(())
+}
+
+/// Delete a branch
+pub fn delete_branch(repo: &Repository, branch_name: &str) -> Result<(), String> {
+    // Prevent deleting the current branch
+    let head = repo.head()
+        .map_err(|e| format!("Failed to get HEAD: {}", e))?;
+
+    if let Some(head_name) = head.shorthand() {
+        if head_name == branch_name {
+            return Err("Cannot delete the currently checked out branch".to_string());
+        }
+    }
+
+    // Find and delete the branch
+    let mut branch = repo.find_branch(branch_name, BranchType::Local)
+        .map_err(|e| format!("Branch '{}' not found: {}", branch_name, e))?;
+
+    branch.delete()
+        .map_err(|e| format!("Failed to delete branch '{}': {}", branch_name, e))?;
+
+    Ok(())
+}
+
+// ============ Discard Operations ============
+
+/// Discard changes in a single file (restore to HEAD)
+pub fn discard_file(repo: &Repository, path: &str) -> Result<(), String> {
+    let path_obj = std::path::Path::new(path);
+
+    // Check if file is untracked (not in HEAD)
+    let head = repo.head().ok();
+    let tree = head.as_ref()
+        .and_then(|h| h.peel_to_tree().ok());
+
+    if let Some(tree) = tree {
+        // Check if file exists in tree (tracked file)
+        if tree.get_path(path_obj).is_ok() {
+            // Tracked file - checkout from HEAD
+            repo.checkout_head(Some(
+                git2::build::CheckoutBuilder::default()
+                    .force()
+                    .path(path)
+            )).map_err(|e| format!("Failed to discard changes: {}", e))?;
+        } else {
+            // Untracked file - delete it
+            let workdir = repo.workdir()
+                .ok_or("Repository has no working directory")?;
+            let full_path = workdir.join(path);
+            if full_path.exists() {
+                if full_path.is_dir() {
+                    std::fs::remove_dir_all(&full_path)
+                        .map_err(|e| format!("Failed to remove directory: {}", e))?;
+                } else {
+                    std::fs::remove_file(&full_path)
+                        .map_err(|e| format!("Failed to remove file: {}", e))?;
+                }
+            }
+        }
+    } else {
+        // No HEAD (initial commit state) - just delete the file
+        let workdir = repo.workdir()
+            .ok_or("Repository has no working directory")?;
+        let full_path = workdir.join(path);
+        if full_path.exists() {
+            std::fs::remove_file(&full_path)
+                .map_err(|e| format!("Failed to remove file: {}", e))?;
+        }
+    }
+
+    Ok(())
+}
+
+/// Discard all unstaged changes (restore working directory to index)
+pub fn discard_all_unstaged(repo: &Repository) -> Result<(), String> {
+    repo.checkout_index(
+        None,
+        Some(
+            git2::build::CheckoutBuilder::default()
+                .force()
+                .recreate_missing(true)
+        )
+    ).map_err(|e| format!("Failed to discard all changes: {}", e))?;
+
+    Ok(())
+}
+
+/// Clean untracked files
+pub fn clean_untracked(repo: &Repository, paths: Option<Vec<String>>) -> Result<u32, String> {
+    let workdir = repo.workdir()
+        .ok_or("Repository has no working directory")?;
+
+    let mut opts = git2::StatusOptions::new();
+    opts.include_untracked(true)
+        .recurse_untracked_dirs(true)
+        .include_ignored(false);
+
+    let statuses = repo.statuses(Some(&mut opts))
+        .map_err(|e| format!("Failed to get status: {}", e))?;
+
+    let mut removed_count = 0;
+
+    for entry in statuses.iter() {
+        if !entry.status().is_wt_new() {
+            continue;
+        }
+
+        let file_path = match entry.path() {
+            Some(p) => p.to_string(),
+            None => continue,
+        };
+
+        // If specific paths provided, check if this file matches
+        if let Some(ref filter_paths) = paths {
+            if !filter_paths.contains(&file_path) {
+                continue;
+            }
+        }
+
+        let full_path = workdir.join(&file_path);
+        if full_path.exists() {
+            if full_path.is_dir() {
+                std::fs::remove_dir_all(&full_path)
+                    .map_err(|e| format!("Failed to remove directory '{}': {}", file_path, e))?;
+            } else {
+                std::fs::remove_file(&full_path)
+                    .map_err(|e| format!("Failed to remove file '{}': {}", file_path, e))?;
+            }
+            removed_count += 1;
+        }
+    }
+
+    Ok(removed_count)
 }

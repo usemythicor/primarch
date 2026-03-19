@@ -1,4 +1,5 @@
 import { defineStore } from 'pinia';
+import { invoke } from '@tauri-apps/api/core';
 import { ref, computed } from 'vue';
 import type { LayoutNode } from '../types';
 import {
@@ -23,7 +24,7 @@ export const useLayoutStore = defineStore('layout', () => {
   const allTerminals = computed(() => getAllTerminals(rootLayout.value));
 
   // Actions
-  function splitPane(
+  async function splitPane(
     direction: 'horizontal' | 'vertical',
     targetId?: string,
     options?: {
@@ -35,7 +36,23 @@ export const useLayoutStore = defineStore('layout', () => {
     const target = targetId || activePane.value;
     if (!target) return;
 
-    rootLayout.value = splitNode(rootLayout.value, target, direction, options);
+    // If no cwd provided, try to get it from the active terminal
+    let finalOptions = options || {};
+    if (!finalOptions.cwd && target) {
+      const sessionId = sessionRegistry.value.get(target);
+      if (sessionId) {
+        try {
+          const cwd = await invoke<string>('get_terminal_cwd', { sessionId });
+          if (cwd) {
+            finalOptions = { ...finalOptions, cwd };
+          }
+        } catch {
+          // CWD not available - use default
+        }
+      }
+    }
+
+    rootLayout.value = splitNode(rootLayout.value, target, direction, finalOptions);
 
     // Set focus to the new pane
     const terminals = getAllTerminals(rootLayout.value);
@@ -45,18 +62,18 @@ export const useLayoutStore = defineStore('layout', () => {
     }
   }
 
-  function splitHorizontal(
+  async function splitHorizontal(
     targetId?: string,
     options?: { shell?: string; cwd?: string; startupCommand?: string }
   ) {
-    splitPane('horizontal', targetId, options);
+    await splitPane('horizontal', targetId, options);
   }
 
-  function splitVertical(
+  async function splitVertical(
     targetId?: string,
     options?: { shell?: string; cwd?: string; startupCommand?: string }
   ) {
-    splitPane('vertical', targetId, options);
+    await splitPane('vertical', targetId, options);
   }
 
   function closePane(targetId: string) {

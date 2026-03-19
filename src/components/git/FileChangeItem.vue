@@ -4,6 +4,7 @@ import {
   DocumentIcon,
   PlusIcon,
   MinusIcon,
+  ArrowUturnLeftIcon,
 } from '@heroicons/vue/24/outline';
 import type { FileStatus } from '../../types';
 
@@ -15,6 +16,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   (e: 'stage', path: string): void;
   (e: 'unstage', path: string): void;
+  (e: 'discard', path: string): void;
   (e: 'view-diff'): void;
 }>();
 
@@ -74,6 +76,16 @@ function handleAction() {
         {{ directory }}
       </span>
     </div>
+
+    <!-- Discard button (only for unstaged) -->
+    <button
+      v-if="!staged"
+      @click.stop="emit('discard', file.path)"
+      class="action-btn p-0.5 transition-colors opacity-0 group-hover:opacity-100"
+      title="Discard Changes"
+    >
+      <ArrowUturnLeftIcon class="w-3.5 h-3.5" style="color: var(--accent-orange);" />
+    </button>
 
     <!-- Action button (stage/unstage) -->
     <button

@@ -1,4 +1,4 @@
-use notify::{Config, Event, RecommendedWatcher, RecursiveMode, Watcher};
+use notify::{Config, RecommendedWatcher, RecursiveMode, Watcher};
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::mpsc::channel;
@@ -14,8 +14,10 @@ pub struct WatcherManager {
 }
 
 struct WatcherHandle {
+    // Kept alive to maintain the watcher subscription
     #[allow(dead_code)]
     watcher: RecommendedWatcher,
+    #[allow(dead_code)]
     path: PathBuf,
 }
 
@@ -106,10 +108,6 @@ impl WatcherManager {
         self.watchers.write().remove(repo_id);
     }
 
-    /// Check if a repository is being watched
-    pub fn is_watching(&self, repo_id: &str) -> bool {
-        self.watchers.read().contains_key(repo_id)
-    }
 }
 
 impl Default for WatcherManager {

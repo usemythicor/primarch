@@ -168,6 +168,7 @@ fn detect_wsl_distros() -> Vec<ShellInfo> {
 }
 
 /// Get the default shell
+#[allow(dead_code)] // Available for programmatic shell selection
 pub fn get_default_shell() -> ShellInfo {
     let shells = detect_shells();
     shells.into_iter().next().unwrap_or_else(|| ShellInfo {

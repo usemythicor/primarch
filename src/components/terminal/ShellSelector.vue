@@ -27,9 +27,8 @@ const isLoading = ref(true);
 onMounted(async () => {
   try {
     shells.value = await invoke<ShellInfo[]>('get_available_shells');
-  } catch (error) {
-    console.error('Failed to get shells:', error);
-    // Fallback to basic shells
+  } catch {
+    // Fallback to basic shells if detection fails
     shells.value = [
       {
         id: 'powershell',

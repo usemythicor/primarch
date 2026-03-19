@@ -93,6 +93,7 @@ pub fn list_workspaces() -> Result<Vec<Workspace>, String> {
 }
 
 /// Check if a workspace exists
+#[allow(dead_code)] // Available for validation before operations
 pub fn workspace_exists(id: &str) -> Result<bool, String> {
     let path = get_workspace_path(id)?;
     Ok(path.exists())

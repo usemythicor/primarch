@@ -7,11 +7,15 @@ import {
   PlusIcon,
   DocumentIcon,
   FolderIcon,
+  ChevronDownIcon,
+  ArrowUturnLeftIcon,
+  TrashIcon,
 } from '@heroicons/vue/24/outline';
 import { useGitStore } from '../../stores/git';
 import FileChangeItem from './FileChangeItem.vue';
 import CommitPanel from './CommitPanel.vue';
 import CommitHistory from './CommitHistory.vue';
+import BranchSelector from './BranchSelector.vue';
 
 const emit = defineEmits<{
   (e: 'close'): void;
@@ -28,6 +32,9 @@ const hasRepo = computed(() => gitStore.hasRepo);
 const error = computed(() => gitStore.error);
 const remoteMessage = computed(() => gitStore.remoteMessage);
 const activeTab = computed(() => gitStore.activeTab);
+const branchName = computed(() => gitStore.branchName);
+const branchSelectorVisible = computed(() => gitStore.branchSelectorVisible);
+const isDiscarding = computed(() => gitStore.isDiscarding);
 
 function setTab(tab: 'changes' | 'history') {
   gitStore.setActiveTab(tab);
@@ -51,6 +58,32 @@ function handleUnstage(path: string) {
 
 function handleViewDiff(path: string, staged: boolean) {
   gitStore.viewFileDiff(path, staged);
+}
+
+function handleDiscard(path: string) {
+  if (confirm(`Discard changes to "${path}"?`)) {
+    gitStore.discardFile(path);
+  }
+}
+
+async function handleDiscardAll() {
+  if (confirm('Discard all unstaged changes? This cannot be undone.')) {
+    await gitStore.discardAll();
+  }
+}
+
+async function handleCleanUntracked() {
+  if (confirm('Delete all untracked files? This cannot be undone.')) {
+    await gitStore.cleanUntracked();
+  }
+}
+
+function showBranchSelector() {
+  gitStore.showBranchSelector();
+}
+
+function hideBranchSelector() {
+  gitStore.hideBranchSelector();
 }
 </script>
 
@@ -85,6 +118,20 @@ function handleViewDiff(path: string, staged: boolean) {
         </button>
       </div>
     </div>
+
+    <!-- Branch Selector Button -->
+    <button
+      v-if="hasRepo && branchName"
+      @click="showBranchSelector"
+      class="flex items-center gap-1 px-3 py-1.5 w-full text-left transition-colors hover:bg-[var(--bg-hover)]"
+      style="border-bottom: 1px solid var(--border-subtle);"
+    >
+      <CodeBracketIcon class="w-3.5 h-3.5" style="color: var(--accent-green);" />
+      <span class="text-sm flex-1 truncate" style="color: var(--text-primary);">
+        {{ branchName }}
+      </span>
+      <ChevronDownIcon class="w-3.5 h-3.5" style="color: var(--text-muted);" />
+    </button>
 
     <!-- Remote message -->
     <div
@@ -183,14 +230,25 @@ function handleViewDiff(path: string, staged: boolean) {
             CHANGES
             <span style="color: var(--accent-orange);">({{ unstagedFiles.length }})</span>
           </span>
-          <button
-            @click="stageAll"
-            class="p-0.5 transition-colors hover:text-white"
-            style="color: var(--text-muted);"
-            title="Stage All"
-          >
-            <PlusIcon class="w-3.5 h-3.5" />
-          </button>
+          <div class="flex items-center gap-1">
+            <button
+              @click="handleDiscardAll"
+              :disabled="isDiscarding"
+              class="p-0.5 transition-colors hover:text-white"
+              style="color: var(--text-muted);"
+              title="Discard All Changes"
+            >
+              <ArrowUturnLeftIcon class="w-3.5 h-3.5" />
+            </button>
+            <button
+              @click="stageAll"
+              class="p-0.5 transition-colors hover:text-white"
+              style="color: var(--text-muted);"
+              title="Stage All"
+            >
+              <PlusIcon class="w-3.5 h-3.5" />
+            </button>
+          </div>
         </div>
         <FileChangeItem
           v-for="file in unstagedFiles"
@@ -198,6 +256,7 @@ function handleViewDiff(path: string, staged: boolean) {
           :file="file"
           :staged="false"
           @stage="handleStage"
+          @discard="handleDiscard"
           @view-diff="handleViewDiff(file.path, false)"
         />
       </div>
@@ -209,16 +268,50 @@ function handleViewDiff(path: string, staged: boolean) {
             UNTRACKED
             <span style="color: var(--text-secondary);">({{ untrackedFiles.length }})</span>
           </span>
+          <div class="flex items-center gap-1">
+            <button
+              @click="handleCleanUntracked"
+              :disabled="isDiscarding"
+              class="p-0.5 transition-colors hover:text-white"
+              style="color: var(--text-muted);"
+              title="Delete All Untracked"
+            >
+              <TrashIcon class="w-3.5 h-3.5" />
+            </button>
+            <button
+              @click="untrackedFiles.forEach(p => handleStage(p))"
+              class="p-0.5 transition-colors hover:text-white"
+              style="color: var(--text-muted);"
+              title="Stage All Untracked"
+            >
+              <PlusIcon class="w-3.5 h-3.5" />
+            </button>
+          </div>
         </div>
         <div
           v-for="path in untrackedFiles"
           :key="path"
-          class="flex items-center gap-2 px-3 py-1 cursor-pointer transition-colors"
+          class="untracked-item flex items-center gap-2 px-3 py-1 cursor-pointer transition-colors group"
           style="color: var(--text-secondary);"
-          @click="handleStage(path)"
         >
           <DocumentIcon class="w-3.5 h-3.5 flex-shrink-0" />
-          <span class="text-label truncate flex-1">{{ path }}</span>
+          <span class="text-label truncate flex-1" @click="handleStage(path)">{{ path }}</span>
+          <button
+            @click.stop="handleDiscard(path)"
+            class="p-0.5 transition-opacity opacity-0 group-hover:opacity-100"
+            style="color: var(--accent-red);"
+            title="Delete File"
+          >
+            <TrashIcon class="w-3 h-3" />
+          </button>
+          <button
+            @click.stop="handleStage(path)"
+            class="p-0.5 transition-opacity opacity-0 group-hover:opacity-100"
+            style="color: var(--accent-green);"
+            title="Stage"
+          >
+            <PlusIcon class="w-3 h-3" />
+          </button>
           <span class="text-label" style="color: var(--accent-green);">U</span>
         </div>
       </div>
@@ -239,6 +332,12 @@ function handleViewDiff(path: string, staged: boolean) {
 
     <!-- Commit Panel (only on changes tab) -->
     <CommitPanel v-if="hasRepo && activeTab === 'changes'" />
+
+    <!-- Branch Selector Modal -->
+    <BranchSelector
+      v-if="branchSelectorVisible"
+      @close="hideBranchSelector"
+    />
   </div>
 </template>
 
@@ -247,5 +346,9 @@ function handleViewDiff(path: string, staged: boolean) {
   width: 280px;
   min-width: 200px;
   max-width: 400px;
+}
+
+.untracked-item:hover {
+  background: var(--bg-hover);
 }
 </style>

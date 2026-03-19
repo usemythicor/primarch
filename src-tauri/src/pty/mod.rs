@@ -2,7 +2,7 @@ mod session;
 pub mod shells;
 
 pub use session::*;
-pub use shells::{detect_shells, get_default_shell, ShellInfo, ShellType};
+pub use shells::{detect_shells, ShellInfo};
 
 use parking_lot::RwLock;
 use std::collections::HashMap;
@@ -81,6 +81,7 @@ impl PtyManager {
             Err(format!("Session {} not found", id))
         }
     }
+
 }
 
 impl Default for PtyManager {

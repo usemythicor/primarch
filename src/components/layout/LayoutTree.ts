@@ -4,7 +4,7 @@ import type { LayoutNode } from '../../types';
  * Generate a unique ID for layout nodes
  */
 export function generateId(): string {
-  return Math.random().toString(36).substring(2, 11);
+  return crypto.randomUUID();
 }
 
 /**

@@ -22,7 +22,6 @@ export const useWorkspaceStore = defineStore('workspace', () => {
       workspaces.value = await invoke<Workspace[]>('list_workspaces_cmd');
     } catch (e) {
       error.value = `Failed to load workspaces: ${e}`;
-      console.error(error.value);
     } finally {
       isLoading.value = false;
     }
@@ -50,8 +49,7 @@ export const useWorkspaceStore = defineStore('workspace', () => {
           try {
             const cwd = await invoke<string>('get_terminal_cwd', { sessionId });
             updatedTerminal.cwd = cwd;
-          } catch (e) {
-            console.warn(`Failed to get cwd for session ${sessionId}:`, e);
+          } catch {
             // Keep the original cwd if we can't get the current one
           }
         }
@@ -86,7 +84,6 @@ export const useWorkspaceStore = defineStore('workspace', () => {
       return workspace;
     } catch (e) {
       error.value = `Failed to save workspace: ${e}`;
-      console.error(error.value);
       throw e;
     } finally {
       isLoading.value = false;
@@ -110,7 +107,6 @@ export const useWorkspaceStore = defineStore('workspace', () => {
       return converted;
     } catch (e) {
       error.value = `Failed to load workspace: ${e}`;
-      console.error(error.value);
       throw e;
     } finally {
       isLoading.value = false;
@@ -133,7 +129,6 @@ export const useWorkspaceStore = defineStore('workspace', () => {
       }
     } catch (e) {
       error.value = `Failed to delete workspace: ${e}`;
-      console.error(error.value);
       throw e;
     } finally {
       isLoading.value = false;
@@ -169,7 +164,6 @@ export const useWorkspaceStore = defineStore('workspace', () => {
       return workspace;
     } catch (e) {
       error.value = `Failed to update workspace: ${e}`;
-      console.error(error.value);
       throw e;
     } finally {
       isLoading.value = false;

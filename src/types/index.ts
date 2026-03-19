@@ -97,43 +97,43 @@ export interface BranchInfo {
 
 export interface FileDiff {
   path: string;
-  old_path?: string;
+  oldPath?: string;
   hunks: DiffHunk[];
-  is_binary: boolean;
+  isBinary: boolean;
   additions: number;
   deletions: number;
 }
 
 export interface DiffHunk {
   header: string;
-  old_start: number;
-  old_lines: number;
-  new_start: number;
-  new_lines: number;
+  oldStart: number;
+  oldLines: number;
+  newStart: number;
+  newLines: number;
   lines: DiffLine[];
 }
 
 export interface DiffLine {
   origin: string;
   content: string;
-  old_lineno?: number;
-  new_lineno?: number;
+  oldLineno?: number;
+  newLineno?: number;
 }
 
 export interface CommitInfo {
   oid: string;
-  short_id: string;
+  shortId: string;
   message: string;
   summary: string;
-  author_name: string;
-  author_email: string;
+  authorName: string;
+  authorEmail: string;
   timestamp: number;
-  parent_ids: string[];
+  parentIds: string[];
   refs: RefInfo[];
 }
 
 export interface RefInfo {
   name: string;
-  ref_type: 'Branch' | 'Tag' | 'RemoteBranch';
-  is_head: boolean;
+  refType: 'Branch' | 'Tag' | 'RemoteBranch';
+  isHead: boolean;
 }

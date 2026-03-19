@@ -94,6 +94,7 @@ fn start_terminal_reader(
 
     let reader = session.get_reader();
     let session_id_clone = session_id.clone();
+    let session_for_cwd = session.clone();
 
     // Spawn a thread to read from the PTY and emit events
     thread::spawn(move || {
@@ -108,6 +109,14 @@ fn start_terminal_reader(
                 Ok(n) => {
                     // Convert to string and emit
                     let data = String::from_utf8_lossy(&buf[..n]).to_string();
+
+                    // Parse OSC sequences for CWD updates
+                    // OSC 9;9;path ST (PowerShell/ConEmu style)
+                    // OSC 7;file://host/path ST (macOS/Linux style)
+                    if let Some(cwd) = parse_osc_cwd(&data) {
+                        session_for_cwd.set_cwd(cwd);
+                    }
+
                     let _ = app.emit(&format!("terminal-data-{}", session_id_clone), data);
                 }
                 Err(e) => {
@@ -120,6 +129,53 @@ fn start_terminal_reader(
     });
 
     Ok(())
+}
+
+/// Parse OSC escape sequences to extract current working directory
+fn parse_osc_cwd(data: &str) -> Option<String> {
+    // OSC = \x1b] (ESC ])
+    // ST = \x1b\ (ESC \) or \x07 (BEL)
+
+    // PowerShell/ConEmu style: OSC 9;9;path ST
+    if let Some(start) = data.find("\x1b]9;9;") {
+        let path_start = start + 6; // Skip "\x1b]9;9;"
+        let remaining = &data[path_start..];
+
+        // Find terminator (BEL or ESC \)
+        let end = remaining
+            .find('\x07')
+            .or_else(|| remaining.find("\x1b\\"))
+            .unwrap_or(remaining.len());
+
+        let path = remaining[..end].trim();
+        if !path.is_empty() {
+            return Some(path.to_string());
+        }
+    }
+
+    // macOS/Linux style: OSC 7;file://host/path ST
+    if let Some(start) = data.find("\x1b]7;") {
+        let url_start = start + 4; // Skip "\x1b]7;"
+        let remaining = &data[url_start..];
+
+        let end = remaining
+            .find('\x07')
+            .or_else(|| remaining.find("\x1b\\"))
+            .unwrap_or(remaining.len());
+
+        let url = remaining[..end].trim();
+        if let Some(path) = url.strip_prefix("file://") {
+            // Skip hostname (find first / after the host)
+            if let Some(slash_pos) = path.find('/') {
+                let path_part = &path[slash_pos..];
+                // Basic URL decode for common cases (spaces as %20)
+                let decoded = path_part.replace("%20", " ");
+                return Some(decoded);
+            }
+        }
+    }
+
+    None
 }
 
 /// Get all available shells on the system
@@ -378,6 +434,71 @@ fn git_stop_watcher(
     Ok(())
 }
 
+// ============ Branch Commands ============
+
+/// Checkout an existing branch
+#[tauri::command]
+fn git_checkout_branch(
+    state: State<'_, Arc<RwLock<AppState>>>,
+    repo_id: String,
+    branch_name: String,
+) -> Result<(), String> {
+    state.read().git_manager.checkout_branch(&repo_id, &branch_name)
+}
+
+/// Create a new branch
+#[tauri::command]
+fn git_create_branch(
+    state: State<'_, Arc<RwLock<AppState>>>,
+    repo_id: String,
+    branch_name: String,
+    checkout: Option<bool>,
+) -> Result<(), String> {
+    let checkout = checkout.unwrap_or(true);
+    state.read().git_manager.create_branch(&repo_id, &branch_name, checkout)
+}
+
+/// Delete a branch
+#[tauri::command]
+fn git_delete_branch(
+    state: State<'_, Arc<RwLock<AppState>>>,
+    repo_id: String,
+    branch_name: String,
+) -> Result<(), String> {
+    state.read().git_manager.delete_branch(&repo_id, &branch_name)
+}
+
+// ============ Discard Commands ============
+
+/// Discard changes in a single file
+#[tauri::command]
+fn git_discard_file(
+    state: State<'_, Arc<RwLock<AppState>>>,
+    repo_id: String,
+    path: String,
+) -> Result<(), String> {
+    state.read().git_manager.discard_file(&repo_id, &path)
+}
+
+/// Discard all unstaged changes
+#[tauri::command]
+fn git_discard_all(
+    state: State<'_, Arc<RwLock<AppState>>>,
+    repo_id: String,
+) -> Result<(), String> {
+    state.read().git_manager.discard_all_unstaged(&repo_id)
+}
+
+/// Clean untracked files
+#[tauri::command]
+fn git_clean_untracked(
+    state: State<'_, Arc<RwLock<AppState>>>,
+    repo_id: String,
+    paths: Option<Vec<String>>,
+) -> Result<u32, String> {
+    state.read().git_manager.clean_untracked(&repo_id, paths)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let state = Arc::new(RwLock::new(AppState {
@@ -427,6 +548,14 @@ pub fn run() {
             git_commit_files,
             git_start_watcher,
             git_stop_watcher,
+            // Branch commands
+            git_checkout_branch,
+            git_create_branch,
+            git_delete_branch,
+            // Discard commands
+            git_discard_file,
+            git_discard_all,
+            git_clean_untracked,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

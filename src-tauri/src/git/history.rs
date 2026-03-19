@@ -1,9 +1,10 @@
-use git2::{Repository, Revwalk, Sort};
+use git2::{Repository, Sort};
 use serde::Serialize;
 use std::collections::HashMap;
 
 /// Commit information for display
 #[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct CommitInfo {
     pub oid: String,
     pub short_id: String,
@@ -18,6 +19,7 @@ pub struct CommitInfo {
 
 /// Reference information (branch, tag, etc.)
 #[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct RefInfo {
     pub name: String,
     pub ref_type: RefType,

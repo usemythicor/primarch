@@ -104,7 +104,7 @@ function toggleMode() {
       </div>
 
       <!-- Binary file -->
-      <div v-else-if="diff.is_binary" class="flex items-center justify-center h-full">
+      <div v-else-if="diff.isBinary" class="flex items-center justify-center h-full">
         <span class="text-label" style="color: var(--text-muted);">Binary file - cannot display diff</span>
       </div>
 

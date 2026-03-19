@@ -143,8 +143,8 @@ function loadSettings(): Settings {
     if (saved) {
       return { ...defaultSettings, ...JSON.parse(saved) };
     }
-  } catch (e) {
-    console.error('Failed to load settings:', e);
+  } catch {
+    // Return defaults if settings are corrupted
   }
   return defaultSettings;
 }
@@ -152,7 +152,7 @@ function loadSettings(): Settings {
 function saveSettings(settings: Settings) {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
-  } catch (e) {
-    console.error('Failed to save settings:', e);
+  } catch {
+    // localStorage may be full or unavailable
   }
 }
