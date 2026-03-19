@@ -81,25 +81,22 @@ function toggleCreateForm() {
         <div class="flex items-center gap-1">
           <button
             @click="handleRefresh"
-            class="p-1 transition-colors hover:text-white"
+            class="btn-icon"
             :class="branchesLoading ? 'animate-spin' : ''"
-            style="color: var(--text-muted);"
             title="Refresh"
           >
             <ArrowPathIcon class="w-4 h-4" />
           </button>
           <button
             @click="toggleCreateForm"
-            class="p-1 transition-colors hover:text-white"
-            style="color: var(--text-muted);"
+            class="btn-icon"
             title="Create Branch"
           >
             <PlusIcon class="w-4 h-4" />
           </button>
           <button
             @click="emit('close')"
-            class="p-1 transition-colors hover:text-white"
-            style="color: var(--text-muted);"
+            class="btn-icon btn-icon-danger"
             title="Close"
           >
             <XMarkIcon class="w-4 h-4" />

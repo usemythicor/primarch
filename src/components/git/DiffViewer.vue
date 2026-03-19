@@ -71,9 +71,8 @@ function toggleMode() {
         <!-- Mode toggle -->
         <button
           @click="toggleMode"
-          class="p-1.5 transition-colors"
+          class="btn-icon"
           :title="mode === 'split' ? 'Switch to inline mode' : 'Switch to split mode'"
-          style="color: var(--text-muted);"
         >
           <ArrowsRightLeftIcon v-if="mode === 'split'" class="w-4 h-4" />
           <Bars3BottomLeftIcon v-else class="w-4 h-4" />
@@ -82,8 +81,7 @@ function toggleMode() {
         <!-- Close button -->
         <button
           @click="close"
-          class="p-1.5 transition-colors hover:text-white"
-          style="color: var(--text-muted);"
+          class="btn-icon btn-icon-danger"
           title="Close"
         >
           <XMarkIcon class="w-4 h-4" />

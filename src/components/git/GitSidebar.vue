@@ -101,17 +101,15 @@ function hideBranchSelector() {
       <div class="flex items-center gap-1">
         <button
           @click="refresh"
-          class="p-1 transition-colors"
+          class="btn-icon"
           :class="isLoading ? 'animate-spin' : ''"
-          style="color: var(--text-muted);"
           title="Refresh"
         >
           <ArrowPathIcon class="w-4 h-4" />
         </button>
         <button
           @click="emit('close')"
-          class="p-1 transition-colors hover:text-white"
-          style="color: var(--text-muted);"
+          class="btn-icon btn-icon-danger"
           title="Close"
         >
           <XMarkIcon class="w-4 h-4" />
@@ -142,7 +140,7 @@ function hideBranchSelector() {
       <span class="text-label">{{ remoteMessage }}</span>
       <button
         @click="gitStore.clearRemoteMessage()"
-        class="p-0.5 hover:text-white"
+        class="btn-icon btn-icon-danger p-0.5"
       >
         <XMarkIcon class="w-3 h-3" />
       </button>
@@ -234,16 +232,14 @@ function hideBranchSelector() {
             <button
               @click="handleDiscardAll"
               :disabled="isDiscarding"
-              class="p-0.5 transition-colors hover:text-white"
-              style="color: var(--text-muted);"
+              class="btn-icon btn-icon-danger p-0.5"
               title="Discard All Changes"
             >
               <ArrowUturnLeftIcon class="w-3.5 h-3.5" />
             </button>
             <button
               @click="stageAll"
-              class="p-0.5 transition-colors hover:text-white"
-              style="color: var(--text-muted);"
+              class="btn-icon p-0.5"
               title="Stage All"
             >
               <PlusIcon class="w-3.5 h-3.5" />
@@ -272,16 +268,14 @@ function hideBranchSelector() {
             <button
               @click="handleCleanUntracked"
               :disabled="isDiscarding"
-              class="p-0.5 transition-colors hover:text-white"
-              style="color: var(--text-muted);"
+              class="btn-icon btn-icon-danger p-0.5"
               title="Delete All Untracked"
             >
               <TrashIcon class="w-3.5 h-3.5" />
             </button>
             <button
               @click="untrackedFiles.forEach(p => handleStage(p))"
-              class="p-0.5 transition-colors hover:text-white"
-              style="color: var(--text-muted);"
+              class="btn-icon p-0.5"
               title="Stage All Untracked"
             >
               <PlusIcon class="w-3.5 h-3.5" />
@@ -350,5 +344,10 @@ function hideBranchSelector() {
 
 .untracked-item:hover {
   background: var(--bg-hover);
+}
+
+.git-sidebar button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
 }
 </style>
