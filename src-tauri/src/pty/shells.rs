@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use std::path::Path;
 use std::process::Command;
 
 /// Represents a detected shell on the system
@@ -14,6 +15,9 @@ pub struct ShellInfo {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "lowercase")]
 pub enum ShellType {
+    Zsh,
+    Bash,
+    Fish,
     PowerShell,
     Cmd,
     Wsl,
@@ -23,6 +27,23 @@ pub enum ShellType {
 
 /// Detect all available shells on the system
 pub fn detect_shells() -> Vec<ShellInfo> {
+    #[cfg(windows)]
+    {
+        detect_shells_windows()
+    }
+
+    #[cfg(not(windows))]
+    {
+        detect_shells_unix()
+    }
+}
+
+// ============================================================================
+// Windows Shell Detection
+// ============================================================================
+
+#[cfg(windows)]
+fn detect_shells_windows() -> Vec<ShellInfo> {
     let mut shells = Vec::new();
 
     // PowerShell Core (pwsh)
@@ -55,9 +76,8 @@ pub fn detect_shells() -> Vec<ShellInfo> {
     shells
 }
 
-/// Detect PowerShell Core (pwsh)
+#[cfg(windows)]
 fn detect_pwsh() -> Option<ShellInfo> {
-    // Check if pwsh exists in PATH
     let output = Command::new("where").arg("pwsh.exe").output().ok()?;
 
     if output.status.success() {
@@ -73,7 +93,7 @@ fn detect_pwsh() -> Option<ShellInfo> {
     }
 }
 
-/// Detect Windows PowerShell
+#[cfg(windows)]
 fn detect_windows_powershell() -> Option<ShellInfo> {
     let output = Command::new("where").arg("powershell.exe").output().ok()?;
 
@@ -90,16 +110,15 @@ fn detect_windows_powershell() -> Option<ShellInfo> {
     }
 }
 
-/// Detect Git Bash
+#[cfg(windows)]
 fn detect_git_bash() -> Option<ShellInfo> {
-    // Common Git Bash locations
     let paths = [
         r"C:\Program Files\Git\bin\bash.exe",
         r"C:\Program Files (x86)\Git\bin\bash.exe",
     ];
 
     for path in paths {
-        if std::path::Path::new(path).exists() {
+        if Path::new(path).exists() {
             return Some(ShellInfo {
                 id: "git-bash".to_string(),
                 name: "Git Bash".to_string(),
@@ -113,11 +132,10 @@ fn detect_git_bash() -> Option<ShellInfo> {
     None
 }
 
-/// Detect WSL distributions
+#[cfg(windows)]
 fn detect_wsl_distros() -> Vec<ShellInfo> {
     let mut distros = Vec::new();
 
-    // Run wsl --list --quiet to get distribution names
     let output = Command::new("wsl.exe").args(["--list", "--quiet"]).output();
 
     if let Ok(output) = output {
@@ -125,7 +143,6 @@ fn detect_wsl_distros() -> Vec<ShellInfo> {
             let stdout = String::from_utf8_lossy(&output.stdout);
 
             for line in stdout.lines() {
-                // Clean up the line (WSL output can have BOM and other artifacts)
                 let distro = line
                     .trim()
                     .trim_start_matches('\u{feff}')
@@ -145,7 +162,6 @@ fn detect_wsl_distros() -> Vec<ShellInfo> {
         }
     }
 
-    // Add default WSL if any distros were found
     if !distros.is_empty() {
         distros.insert(
             0,
@@ -162,15 +178,148 @@ fn detect_wsl_distros() -> Vec<ShellInfo> {
     distros
 }
 
+// ============================================================================
+// Unix/macOS Shell Detection
+// ============================================================================
+
+#[cfg(not(windows))]
+fn detect_shells_unix() -> Vec<ShellInfo> {
+    let mut shells = Vec::new();
+
+    // Get user's default shell from environment
+    if let Ok(default_shell) = std::env::var("SHELL") {
+        let shell_name = Path::new(&default_shell)
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or("shell");
+
+        let shell_type = match shell_name {
+            "zsh" => ShellType::Zsh,
+            "bash" => ShellType::Bash,
+            "fish" => ShellType::Fish,
+            _ => ShellType::Other,
+        };
+
+        shells.push(ShellInfo {
+            id: format!("{}-default", shell_name),
+            name: format!("{} (Default)", capitalize(shell_name)),
+            command: default_shell.clone(),
+            args: vec!["--login".to_string()],
+            shell_type,
+        });
+    }
+
+    // Detect common shells
+    let shell_configs = [
+        ("/bin/zsh", "zsh", "Zsh", ShellType::Zsh),
+        ("/usr/bin/zsh", "zsh", "Zsh", ShellType::Zsh),
+        ("/bin/bash", "bash", "Bash", ShellType::Bash),
+        ("/usr/bin/bash", "bash", "Bash", ShellType::Bash),
+        ("/usr/local/bin/fish", "fish", "Fish", ShellType::Fish),
+        ("/opt/homebrew/bin/fish", "fish", "Fish", ShellType::Fish),
+        ("/usr/bin/fish", "fish", "Fish", ShellType::Fish),
+        ("/bin/sh", "sh", "sh", ShellType::Other),
+    ];
+
+    for (path, id, name, shell_type) in shell_configs {
+        // Skip if already added as default
+        if shells.iter().any(|s| s.command == path) {
+            continue;
+        }
+
+        if Path::new(path).exists() {
+            shells.push(ShellInfo {
+                id: id.to_string(),
+                name: name.to_string(),
+                command: path.to_string(),
+                args: vec!["--login".to_string()],
+                shell_type,
+            });
+        }
+    }
+
+    // Check for PowerShell Core on macOS/Linux
+    if let Some(pwsh) = detect_pwsh_unix() {
+        shells.push(pwsh);
+    }
+
+    shells
+}
+
+#[cfg(not(windows))]
+fn detect_pwsh_unix() -> Option<ShellInfo> {
+    let paths = [
+        "/usr/local/bin/pwsh",
+        "/opt/homebrew/bin/pwsh",
+        "/usr/bin/pwsh",
+    ];
+
+    for path in paths {
+        if Path::new(path).exists() {
+            return Some(ShellInfo {
+                id: "pwsh".to_string(),
+                name: "PowerShell".to_string(),
+                command: path.to_string(),
+                args: vec!["-NoLogo".to_string()],
+                shell_type: ShellType::PowerShell,
+            });
+        }
+    }
+
+    // Also check PATH
+    if Command::new("which")
+        .arg("pwsh")
+        .output()
+        .map(|o| o.status.success())
+        .unwrap_or(false)
+    {
+        return Some(ShellInfo {
+            id: "pwsh".to_string(),
+            name: "PowerShell".to_string(),
+            command: "pwsh".to_string(),
+            args: vec!["-NoLogo".to_string()],
+            shell_type: ShellType::PowerShell,
+        });
+    }
+
+    None
+}
+
+#[cfg(not(windows))]
+fn capitalize(s: &str) -> String {
+    let mut chars = s.chars();
+    match chars.next() {
+        None => String::new(),
+        Some(c) => c.to_uppercase().chain(chars).collect(),
+    }
+}
+
+// ============================================================================
+// Common Functions
+// ============================================================================
+
 /// Get the default shell
 #[allow(dead_code)] // Available for programmatic shell selection
 pub fn get_default_shell() -> ShellInfo {
     let shells = detect_shells();
-    shells.into_iter().next().unwrap_or_else(|| ShellInfo {
+
+    #[cfg(windows)]
+    let fallback = ShellInfo {
         id: "powershell".to_string(),
         name: "Windows PowerShell".to_string(),
         command: "powershell.exe".to_string(),
         args: vec![],
         shell_type: ShellType::PowerShell,
-    })
+    };
+
+    #[cfg(not(windows))]
+    let fallback = ShellInfo {
+        id: "bash".to_string(),
+        name: "Bash".to_string(),
+        command: "/bin/bash".to_string(),
+        args: vec!["--login".to_string()],
+        shell_type: ShellType::Bash,
+    };
+
+    shells.into_iter().next().unwrap_or(fallback)
 }

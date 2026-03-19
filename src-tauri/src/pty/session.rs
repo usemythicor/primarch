@@ -184,14 +184,43 @@ impl TerminalSession {
         }
     }
 
-    #[cfg(not(windows))]
+    #[cfg(target_os = "linux")]
     #[allow(dead_code)] // Reserved for fallback when OSC sequences unavailable
     pub fn try_get_process_cwd(&self) -> Option<String> {
-        // On Unix, read /proc/<pid>/cwd
+        // On Linux, read /proc/<pid>/cwd
         let pid = self.get_pid()?;
         std::fs::read_link(format!("/proc/{}/cwd", pid))
             .map(|p| p.to_string_lossy().to_string())
             .ok()
+    }
+
+    #[cfg(target_os = "macos")]
+    #[allow(dead_code)] // Reserved for fallback when OSC sequences unavailable
+    pub fn try_get_process_cwd(&self) -> Option<String> {
+        use std::process::Command;
+
+        let pid = self.get_pid()?;
+
+        // Use lsof to get the current working directory on macOS
+        // lsof -p <pid> -Fn outputs file descriptors, 'cwd' is the current directory
+        let output = Command::new("lsof")
+            .args(["-p", &pid.to_string(), "-Fn", "-d", "cwd"])
+            .output()
+            .ok()?;
+
+        if !output.status.success() {
+            return None;
+        }
+
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        // Parse lsof output - lines starting with 'n' contain the path
+        for line in stdout.lines() {
+            if let Some(path) = line.strip_prefix('n') {
+                return Some(path.to_string());
+            }
+        }
+
+        None
     }
 }
 
@@ -302,8 +331,10 @@ fn detect_default_shell() -> String {
 
 /// Check if a shell exists in PATH
 fn which_shell(name: &str) -> Option<String> {
+    let path_separator = if cfg!(windows) { ';' } else { ':' };
+
     std::env::var("PATH").ok().and_then(|path| {
-        for dir in path.split(';') {
+        for dir in path.split(path_separator) {
             let full_path = std::path::Path::new(dir).join(name);
             if full_path.exists() {
                 return Some(full_path.to_string_lossy().to_string());
