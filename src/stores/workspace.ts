@@ -19,7 +19,13 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     error.value = null;
 
     try {
-      workspaces.value = await invoke<Workspace[]>('list_workspaces_cmd');
+      const raw = await invoke<any[]>('list_workspaces_cmd');
+      workspaces.value = raw.map((w) => ({
+        id: w.id,
+        name: w.name,
+        createdAt: w.created_at,
+        layout: convertNodeFromRust(w.layout),
+      }));
     } catch (e) {
       error.value = `Failed to load workspaces: ${e}`;
     } finally {

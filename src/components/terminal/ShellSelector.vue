@@ -77,16 +77,11 @@ function closeDropdown() {
   <div class="relative" @blur="closeDropdown">
     <button
       @click="toggleDropdown"
-      class="flex items-center gap-2 px-3 py-1.5 transition-all duration-150"
-      :style="{
-        background: isOpen ? 'rgba(0, 212, 255, 0.1)' : 'transparent',
-        border: isOpen ? '1px solid var(--accent-cyan)' : '1px solid var(--border-default)',
-        color: isOpen ? 'var(--accent-cyan)' : 'var(--text-secondary)',
-      }"
+      class="btn-toolbar px-3 py-1.5"
+      :class="{ 'btn-toolbar-active': isOpen }"
       :disabled="isLoading"
     >
       <PlusIcon class="w-3.5 h-3.5" />
-      <span class="text-label">New Terminal</span>
       <ChevronDownIcon
         class="w-3 h-3 transition-transform duration-150"
         :style="{ transform: isOpen ? 'rotate(180deg)' : 'rotate(0deg)' }"

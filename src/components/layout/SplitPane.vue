@@ -38,7 +38,7 @@ const dividerStyle = computed(() => {
   const isActive = isDragging.value || isHovered.value;
   return {
     background: isActive ? 'var(--accent-cyan)' : 'var(--border-subtle)',
-    boxShadow: isActive ? '0 0 10px rgba(0, 212, 255, 0.3)' : 'none',
+    boxShadow: isActive ? '0 0 10px rgba(var(--accent-rgb), 0.3)' : 'none',
   };
 });
 

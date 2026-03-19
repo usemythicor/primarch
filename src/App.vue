@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, computed, watch } from 'vue';
 import {
-  Squares2X2Icon,
   FolderIcon,
   Cog6ToothIcon,
   CommandLineIcon,
@@ -33,7 +32,29 @@ const showWorkspaceManager = ref(false);
 const showSettings = ref(false);
 
 const terminalCount = computed(() => layoutStore.terminalCount);
-const currentThemeName = computed(() => settingsStore.currentTheme.name);
+
+// Delayed tooltip
+const tooltipText = ref('');
+const tooltipVisible = ref(false);
+const tooltipX = ref(0);
+const tooltipY = ref(0);
+let tooltipTimer: ReturnType<typeof setTimeout> | null = null;
+
+function showTooltip(e: MouseEvent, text: string) {
+  const target = (e.currentTarget as HTMLElement).getBoundingClientRect();
+  tooltipX.value = target.left + target.width / 2;
+  tooltipY.value = target.bottom + 6;
+  tooltipText.value = text;
+  tooltipTimer = setTimeout(() => {
+    tooltipVisible.value = true;
+  }, 800);
+}
+
+function hideTooltip() {
+  if (tooltipTimer) clearTimeout(tooltipTimer);
+  tooltipTimer = null;
+  tooltipVisible.value = false;
+}
 const terminalBg = computed(() => settingsStore.currentTheme.background);
 const showGitSidebar = computed(() => gitStore.sidebarVisible);
 const gitChangeCount = computed(() => gitStore.changeCount);
@@ -154,53 +175,43 @@ onUnmounted(() => {
 
       <!-- Right side - Actions -->
       <div class="flex items-center gap-2">
-        <!-- Git button -->
-        <button
-          @click="gitStore.toggleSidebar()"
-          class="flex items-center gap-2 px-3 py-1.5 transition-all duration-150"
-          :style="{
-            background: showGitSidebar ? 'rgba(0, 212, 255, 0.1)' : 'transparent',
-            border: showGitSidebar ? '1px solid var(--accent-cyan)' : '1px solid var(--border-default)',
-            color: showGitSidebar ? 'var(--accent-cyan)' : 'var(--text-secondary)',
-          }"
-          title="Source Control (Ctrl+Shift+G)"
-        >
-          <CodeBracketIcon class="w-3.5 h-3.5" />
-          <span class="text-label">Git</span>
-          <span
-            v-if="gitChangeCount > 0"
-            class="px-1 rounded text-label"
-            style="background: var(--accent-cyan); color: var(--bg-primary); font-size: 0.55rem;"
-          >
-            {{ gitChangeCount }}
-          </span>
-        </button>
-
         <button
           @click="showWorkspaceManager = !showWorkspaceManager; showSettings = false"
-          class="flex items-center gap-2 px-3 py-1.5 transition-all duration-150"
-          :class="showWorkspaceManager ? 'text-cyan-400' : ''"
-          :style="{
-            background: showWorkspaceManager ? 'rgba(0, 212, 255, 0.1)' : 'transparent',
-            border: showWorkspaceManager ? '1px solid var(--accent-cyan)' : '1px solid var(--border-default)',
-            color: showWorkspaceManager ? 'var(--accent-cyan)' : 'var(--text-secondary)',
-          }"
+          class="btn-toolbar px-3 py-1.5"
+          :class="{ 'btn-toolbar-active': showWorkspaceManager }"
           title="Workspaces (Ctrl+Shift+S)"
         >
           <FolderIcon class="w-3.5 h-3.5" />
           <span class="text-label">Workspaces</span>
         </button>
 
+        <div class="w-px h-4" style="background: var(--border-default);"></div>
+
+        <!-- Split buttons -->
+        <div class="tooltip-wrapper relative" @mouseenter="showTooltip($event, 'Split Down  Ctrl+Shift+E')" @mouseleave="hideTooltip">
+          <button
+            @click="layoutStore.splitVertical()"
+            class="btn-toolbar"
+          >
+            <svg class="w-3.5 h-3.5" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1.5" y="1.5" width="13" height="13" rx="1.5" /><line x1="1.5" y1="8" x2="14.5" y2="8" /></svg>
+          </button>
+        </div>
+
+        <div class="tooltip-wrapper relative" @mouseenter="showTooltip($event, 'Split Right  Ctrl+Shift+D')" @mouseleave="hideTooltip">
+          <button
+            @click="layoutStore.splitHorizontal()"
+            class="btn-toolbar"
+          >
+            <svg class="w-3.5 h-3.5" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1.5" y="1.5" width="13" height="13" rx="1.5" /><line x1="8" y1="1.5" x2="8" y2="14.5" /></svg>
+          </button>
+        </div>
+
         <ShellSelector @select="handleShellSelect" />
 
         <button
           @click="showSettings = !showSettings; showWorkspaceManager = false"
-          class="p-1.5 transition-all duration-150"
-          :style="{
-            background: showSettings ? 'rgba(0, 212, 255, 0.1)' : 'transparent',
-            border: showSettings ? '1px solid var(--accent-cyan)' : '1px solid transparent',
-            color: showSettings ? 'var(--accent-cyan)' : 'var(--text-muted)',
-          }"
+          class="btn-icon"
+          :class="{ 'btn-toolbar-active': showSettings }"
           title="Settings (Ctrl+,)"
         >
           <Cog6ToothIcon class="w-4 h-4" />
@@ -314,45 +325,66 @@ onUnmounted(() => {
       <div class="flex items-center gap-4">
         <!-- Git branch info -->
         <div
-          v-if="gitHasRepo"
           class="flex items-center gap-2 cursor-pointer hover:opacity-80"
           @click="gitStore.toggleSidebar()"
           title="Source Control (Ctrl+Shift+G)"
         >
           <CodeBracketIcon class="w-3 h-3" style="color: var(--text-muted);" />
-          <span class="text-label" style="color: var(--text-secondary);">{{ gitBranchName || 'No branch' }}</span>
-          <span v-if="gitAhead > 0 || gitBehind > 0" class="flex items-center gap-1">
-            <span v-if="gitBehind > 0" class="text-label" style="color: var(--accent-orange);">{{ gitBehind }}↓</span>
-            <span v-if="gitAhead > 0" class="text-label" style="color: var(--accent-green);">{{ gitAhead }}↑</span>
-          </span>
-          <button
-            @click.stop="gitStore.sync()"
-            :disabled="gitIsRemoteOperating"
-            class="p-0.5 transition-colors hover:opacity-100"
-            :class="{ 'animate-spin': gitIsRemoteOperating }"
-            style="color: var(--text-muted);"
-            title="Sync"
-          >
-            <ArrowPathRoundedSquareIcon class="w-3 h-3" />
-          </button>
+          <template v-if="gitHasRepo">
+            <span class="text-label" style="color: var(--text-secondary);">{{ gitBranchName || 'No branch' }}</span>
+            <span v-if="gitAhead > 0 || gitBehind > 0" class="flex items-center gap-1">
+              <span v-if="gitBehind > 0" class="text-label" style="color: var(--accent-orange);">{{ gitBehind }}↓</span>
+              <span v-if="gitAhead > 0" class="text-label" style="color: var(--accent-green);">{{ gitAhead }}↑</span>
+            </span>
+            <span
+              v-if="gitChangeCount > 0"
+              class="px-1 rounded text-label"
+              style="background: var(--accent-cyan); color: var(--bg-primary); font-size: 0.55rem;"
+            >
+              {{ gitChangeCount }}
+            </span>
+            <button
+              @click.stop="gitStore.sync()"
+              :disabled="gitIsRemoteOperating"
+              class="p-0.5 transition-colors hover:opacity-100"
+              :class="{ 'animate-spin': gitIsRemoteOperating }"
+              style="color: var(--text-muted);"
+              title="Sync"
+            >
+              <ArrowPathRoundedSquareIcon class="w-3 h-3" />
+            </button>
+          </template>
+          <span v-else class="text-label" style="color: var(--text-muted);">No Repository</span>
         </div>
 
-        <div class="w-px h-3" style="background: var(--border-default);"></div>
-
-        <!-- Keyboard shortcuts -->
-        <div class="flex items-center gap-2">
-          <Squares2X2Icon class="w-3 h-3" style="color: var(--text-muted);" />
-          <span class="text-label" style="color: var(--text-muted);">Ctrl+Shift+D Split</span>
-        </div>
-      </div>
-      <div class="flex items-center gap-4">
-        <span class="text-label" style="color: var(--text-muted);">Ctrl+Shift+W Close</span>
-        <div class="w-px h-3" style="background: var(--border-default);"></div>
-        <div class="flex items-center gap-2">
-          <div class="w-1.5 h-1.5 rounded-full" style="background: var(--accent-green);"></div>
-          <span class="text-label" style="color: var(--text-secondary);">{{ currentThemeName }}</span>
-        </div>
       </div>
     </div>
+
+    <!-- Delayed tooltip -->
+    <Teleport to="body">
+      <Transition
+        enter-active-class="transition duration-100 ease-out"
+        enter-from-class="opacity-0 translate-y-[-2px]"
+        enter-to-class="opacity-100 translate-y-0"
+        leave-active-class="transition duration-75 ease-in"
+        leave-from-class="opacity-100"
+        leave-to-class="opacity-0"
+      >
+        <div
+          v-if="tooltipVisible"
+          class="fixed z-[100] px-2.5 py-1.5 pointer-events-none whitespace-nowrap text-label"
+          :style="{
+            left: tooltipX + 'px',
+            top: tooltipY + 'px',
+            transform: 'translateX(-50%)',
+            background: 'var(--bg-elevated)',
+            border: '1px solid var(--border-default)',
+            color: 'var(--text-secondary)',
+          }"
+        >
+          {{ tooltipText }}
+        </div>
+      </Transition>
+    </Teleport>
   </div>
 </template>

@@ -52,6 +52,16 @@ export const useLayoutStore = defineStore('layout', () => {
       }
     }
 
+    // Update the existing node's cwd before splitting.
+    // When Vue re-renders, both the copy of the original terminal and the
+    // new terminal need the current CWD (the old session gets destroyed).
+    if (finalOptions.cwd) {
+      const existingNode = findNode(rootLayout.value, target);
+      if (existingNode && existingNode.type === 'terminal') {
+        existingNode.cwd = finalOptions.cwd;
+      }
+    }
+
     rootLayout.value = splitNode(rootLayout.value, target, direction, finalOptions);
 
     // Set focus to the new pane

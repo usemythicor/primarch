@@ -6,7 +6,7 @@ import {
   ArrowPathIcon,
   CursorArrowRaysIcon,
 } from '@heroicons/vue/24/outline';
-import { useSettingsStore } from '../../stores/settings';
+import { useSettingsStore, accentPresets } from '../../stores/settings';
 
 const emit = defineEmits<{
   (e: 'close'): void;
@@ -19,6 +19,7 @@ const currentThemeId = computed(() => settingsStore.themeId);
 const fontSize = computed(() => settingsStore.fontSize);
 const cursorStyle = computed(() => settingsStore.cursorStyle);
 const cursorBlink = computed(() => settingsStore.cursorBlink);
+const currentAccent = computed(() => settingsStore.accentColor);
 
 function selectTheme(id: string) {
   settingsStore.setTheme(id);
@@ -59,10 +60,7 @@ function resetSettings() {
       </div>
       <button
         @click="emit('close')"
-        class="p-1.5 transition-all duration-150"
-        style="color: var(--text-muted);"
-        @mouseenter="($event.target as HTMLElement).style.color = 'var(--accent-red)'"
-        @mouseleave="($event.target as HTMLElement).style.color = 'var(--text-muted)'"
+        class="btn-icon btn-icon-danger"
       >
         <XMarkIcon class="w-4 h-4" />
       </button>
@@ -83,9 +81,9 @@ function resetSettings() {
             @click="selectTheme(theme.id)"
             class="flex items-center gap-3 px-3 py-2.5 transition-all duration-150 text-left"
             :style="{
-              background: currentThemeId === theme.id ? 'rgba(0, 212, 255, 0.08)' : 'var(--bg-tertiary)',
+              background: currentThemeId === theme.id ? 'rgba(var(--accent-rgb), 0.08)' : 'var(--bg-tertiary)',
               border: currentThemeId === theme.id ? '1px solid var(--accent-cyan)' : '1px solid var(--border-subtle)',
-              boxShadow: currentThemeId === theme.id ? '0 0 20px rgba(0, 212, 255, 0.1)' : 'none',
+              boxShadow: currentThemeId === theme.id ? '0 0 20px rgba(var(--accent-rgb), 0.1)' : 'none',
             }"
           >
             <div
@@ -102,16 +100,40 @@ function resetSettings() {
         </div>
       </div>
 
+      <!-- Accent Color -->
+      <div>
+        <div class="flex items-center gap-2 mb-4">
+          <div class="w-4 h-4 rounded-full" style="background: var(--accent-cyan);"></div>
+          <span class="text-header">ACCENT COLOR</span>
+        </div>
+        <div class="flex gap-2 flex-wrap">
+          <button
+            v-for="preset in accentPresets"
+            :key="preset.id"
+            @click="settingsStore.setAccentColor(preset.id)"
+            class="w-8 h-8 transition-all duration-150 flex items-center justify-center"
+            :style="{
+              background: preset.color,
+              boxShadow: currentAccent === preset.id ? `0 0 0 2px var(--bg-secondary), 0 0 0 3px ${preset.color}` : 'none',
+              opacity: currentAccent === preset.id ? 1 : 0.6,
+            }"
+            :title="preset.name"
+          >
+            <svg v-if="currentAccent === preset.id" class="w-3.5 h-3.5" viewBox="0 0 16 16" fill="none" stroke="var(--bg-primary)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="3,8 7,12 13,4" />
+            </svg>
+          </button>
+        </div>
+      </div>
+
       <!-- Font Size -->
       <div>
         <span class="text-header block mb-4">FONT SIZE</span>
         <div class="flex items-center gap-4">
           <button
             @click="changeFontSize(-1)"
-            class="w-10 h-10 flex items-center justify-center transition-all duration-150"
-            style="background: var(--bg-tertiary); border: 1px solid var(--border-default); color: var(--text-secondary);"
-            @mouseenter="($event.target as HTMLElement).style.borderColor = 'var(--accent-cyan)'; ($event.target as HTMLElement).style.color = 'var(--accent-cyan)'"
-            @mouseleave="($event.target as HTMLElement).style.borderColor = 'var(--border-default)'; ($event.target as HTMLElement).style.color = 'var(--text-secondary)'"
+            class="btn-toolbar w-10 h-10 flex items-center justify-center"
+            style="background: var(--bg-tertiary);"
           >
             <span class="text-lg font-light">-</span>
           </button>
@@ -123,10 +145,8 @@ function resetSettings() {
           </div>
           <button
             @click="changeFontSize(1)"
-            class="w-10 h-10 flex items-center justify-center transition-all duration-150"
-            style="background: var(--bg-tertiary); border: 1px solid var(--border-default); color: var(--text-secondary);"
-            @mouseenter="($event.target as HTMLElement).style.borderColor = 'var(--accent-cyan)'; ($event.target as HTMLElement).style.color = 'var(--accent-cyan)'"
-            @mouseleave="($event.target as HTMLElement).style.borderColor = 'var(--border-default)'; ($event.target as HTMLElement).style.color = 'var(--text-secondary)'"
+            class="btn-toolbar w-10 h-10 flex items-center justify-center"
+            style="background: var(--bg-tertiary);"
           >
             <span class="text-lg font-light">+</span>
           </button>
@@ -146,7 +166,7 @@ function resetSettings() {
             @click="setCursorStyle(style)"
             class="flex-1 px-4 py-2.5 transition-all duration-150 uppercase"
             :style="{
-              background: cursorStyle === style ? 'rgba(0, 212, 255, 0.08)' : 'var(--bg-tertiary)',
+              background: cursorStyle === style ? 'rgba(var(--accent-rgb), 0.08)' : 'var(--bg-tertiary)',
               border: cursorStyle === style ? '1px solid var(--accent-cyan)' : '1px solid var(--border-subtle)',
               color: cursorStyle === style ? 'var(--accent-cyan)' : 'var(--text-muted)',
               fontSize: '0.65rem',
@@ -166,7 +186,7 @@ function resetSettings() {
           @click="toggleCursorBlink"
           class="relative w-12 h-6 transition-all duration-200"
           :style="{
-            background: cursorBlink ? 'rgba(0, 212, 255, 0.2)' : 'var(--bg-tertiary)',
+            background: cursorBlink ? 'rgba(var(--accent-rgb), 0.2)' : 'var(--bg-tertiary)',
             border: cursorBlink ? '1px solid var(--accent-cyan)' : '1px solid var(--border-default)',
           }"
         >
@@ -188,10 +208,7 @@ function resetSettings() {
     >
       <button
         @click="resetSettings"
-        class="flex items-center gap-2 px-3 py-1.5 transition-all duration-150"
-        style="background: transparent; border: 1px solid var(--border-default); color: var(--text-muted);"
-        @mouseenter="($event.target as HTMLElement).style.borderColor = 'var(--accent-red)'; ($event.target as HTMLElement).style.color = 'var(--accent-red)'"
-        @mouseleave="($event.target as HTMLElement).style.borderColor = 'var(--border-default)'; ($event.target as HTMLElement).style.color = 'var(--text-muted)'"
+        class="btn-ghost flex items-center gap-2 px-3 py-1.5"
       >
         <ArrowPathIcon class="w-3.5 h-3.5" />
         <span class="text-label">Reset</span>

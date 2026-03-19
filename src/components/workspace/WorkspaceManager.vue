@@ -48,18 +48,26 @@ async function loadWorkspace(id: string) {
 
 async function deleteWorkspace(id: string, event: Event) {
   event.stopPropagation();
-  if (confirm('Delete this workspace?')) {
-    try {
-      await workspaceStore.deleteWorkspace(id);
-    } catch {
-      // Error is displayed via workspaceStore.error
-    }
+  try {
+    await workspaceStore.deleteWorkspace(id);
+  } catch {
+    // Error is displayed via workspaceStore.error
   }
 }
 
 function formatDate(dateStr: string) {
   try {
-    const date = new Date(dateStr);
+    let date: Date;
+    // Handle Rust's unix-seconds format (e.g. "1710812345Z")
+    const unixMatch = dateStr.match(/^(\d+)Z$/);
+    if (unixMatch) {
+      date = new Date(parseInt(unixMatch[1]) * 1000);
+    } else {
+      date = new Date(dateStr);
+    }
+
+    if (isNaN(date.getTime())) return dateStr;
+
     const now = new Date();
     const diff = now.getTime() - date.getTime();
     const days = Math.floor(diff / (1000 * 60 * 60 * 24));
@@ -97,10 +105,7 @@ function formatDate(dateStr: string) {
       </div>
       <button
         @click="emit('close')"
-        class="p-1.5 transition-all duration-150"
-        style="color: var(--text-muted);"
-        @mouseenter="($event.target as HTMLElement).style.color = 'var(--accent-red)'"
-        @mouseleave="($event.target as HTMLElement).style.color = 'var(--text-muted)'"
+        class="btn-icon btn-icon-danger"
       >
         <XMarkIcon class="w-4 h-4" />
       </button>
@@ -114,9 +119,9 @@ function formatDate(dateStr: string) {
           v-if="!showSaveForm"
           @click="showSaveForm = true"
           class="w-full flex items-center justify-center gap-2 py-3 transition-all duration-150"
-          style="background: rgba(0, 212, 255, 0.08); border: 1px dashed var(--accent-cyan); color: var(--accent-cyan);"
-          @mouseenter="($event.target as HTMLElement).style.background = 'rgba(0, 212, 255, 0.15)'"
-          @mouseleave="($event.target as HTMLElement).style.background = 'rgba(0, 212, 255, 0.08)'"
+          style="background: rgba(var(--accent-rgb), 0.08); border: 1px dashed var(--accent-cyan); color: var(--accent-cyan);"
+          @mouseenter="($event.target as HTMLElement).style.background = 'rgba(var(--accent-rgb), 0.15)'"
+          @mouseleave="($event.target as HTMLElement).style.background = 'rgba(var(--accent-rgb), 0.08)'"
         >
           <PlusIcon class="w-4 h-4" />
           <span class="text-label">Save Current Layout</span>
@@ -146,7 +151,7 @@ function formatDate(dateStr: string) {
               :disabled="!newWorkspaceName.trim() || isSaving"
               class="flex-1 py-2 transition-all duration-150"
               :style="{
-                background: !newWorkspaceName.trim() || isSaving ? 'var(--bg-tertiary)' : 'rgba(0, 212, 255, 0.1)',
+                background: !newWorkspaceName.trim() || isSaving ? 'var(--bg-tertiary)' : 'rgba(var(--accent-rgb), 0.1)',
                 border: !newWorkspaceName.trim() || isSaving ? '1px solid var(--border-subtle)' : '1px solid var(--accent-cyan)',
                 color: !newWorkspaceName.trim() || isSaving ? 'var(--text-muted)' : 'var(--accent-cyan)',
                 cursor: !newWorkspaceName.trim() || isSaving ? 'not-allowed' : 'pointer',
@@ -156,10 +161,7 @@ function formatDate(dateStr: string) {
             </button>
             <button
               @click="showSaveForm = false; newWorkspaceName = ''"
-              class="px-4 py-2 transition-all duration-150"
-              style="background: var(--bg-tertiary); border: 1px solid var(--border-default); color: var(--text-muted);"
-              @mouseenter="($event.target as HTMLElement).style.borderColor = 'var(--accent-red)'; ($event.target as HTMLElement).style.color = 'var(--accent-red)'"
-              @mouseleave="($event.target as HTMLElement).style.borderColor = 'var(--border-default)'; ($event.target as HTMLElement).style.color = 'var(--text-muted)'"
+              class="btn-ghost px-4 py-2"
             >
               <span class="text-label">Cancel</span>
             </button>
@@ -192,14 +194,11 @@ function formatDate(dateStr: string) {
           v-for="workspace in workspaceStore.workspaces"
           :key="workspace.id"
           @click="loadWorkspace(workspace.id)"
-          class="group flex items-center gap-4 px-4 py-3 cursor-pointer transition-all duration-150"
-          style="background: var(--bg-tertiary); border: 1px solid var(--border-subtle);"
-          @mouseenter="($event.currentTarget as HTMLElement).style.borderColor = 'var(--accent-cyan)'; ($event.currentTarget as HTMLElement).style.background = 'var(--bg-elevated)'"
-          @mouseleave="($event.currentTarget as HTMLElement).style.borderColor = 'var(--border-subtle)'; ($event.currentTarget as HTMLElement).style.background = 'var(--bg-tertiary)'"
+          class="card-interactive group flex items-center gap-4 px-4 py-3"
         >
           <div
             class="w-8 h-8 flex items-center justify-center"
-            style="background: rgba(0, 212, 255, 0.1); border: 1px solid var(--accent-cyan-dim);"
+            style="background: rgba(var(--accent-rgb), 0.1); border: 1px solid var(--accent-cyan-dim);"
           >
             <FolderIcon class="w-4 h-4" style="color: var(--accent-cyan);" />
           </div>
@@ -216,10 +215,7 @@ function formatDate(dateStr: string) {
           </div>
           <button
             @click="deleteWorkspace(workspace.id, $event)"
-            class="p-2 opacity-0 group-hover:opacity-100 transition-all duration-150"
-            style="color: var(--text-muted);"
-            @mouseenter="($event.target as HTMLElement).style.color = 'var(--accent-red)'"
-            @mouseleave="($event.target as HTMLElement).style.color = 'var(--text-muted)'"
+            class="btn-icon btn-icon-danger opacity-0 group-hover:opacity-100"
             title="Delete workspace"
           >
             <TrashIcon class="w-4 h-4" />

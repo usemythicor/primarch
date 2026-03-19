@@ -137,7 +137,7 @@ function hideBranchSelector() {
     <div
       v-if="remoteMessage"
       class="px-3 py-1.5 flex items-center justify-between"
-      style="background: rgba(0, 212, 255, 0.1); color: var(--accent-cyan);"
+      style="background: rgba(var(--accent-rgb), 0.1); color: var(--accent-cyan);"
     >
       <span class="text-label">{{ remoteMessage }}</span>
       <button
@@ -160,7 +160,7 @@ function hideBranchSelector() {
         :style="{
           color: activeTab === 'changes' ? 'var(--accent-cyan)' : 'var(--text-muted)',
           borderBottom: activeTab === 'changes' ? '2px solid var(--accent-cyan)' : '2px solid transparent',
-          background: activeTab === 'changes' ? 'rgba(0, 212, 255, 0.05)' : 'transparent',
+          background: activeTab === 'changes' ? 'rgba(var(--accent-rgb), 0.05)' : 'transparent',
         }"
       >
         CHANGES
@@ -171,7 +171,7 @@ function hideBranchSelector() {
         :style="{
           color: activeTab === 'history' ? 'var(--accent-cyan)' : 'var(--text-muted)',
           borderBottom: activeTab === 'history' ? '2px solid var(--accent-cyan)' : '2px solid transparent',
-          background: activeTab === 'history' ? 'rgba(0, 212, 255, 0.05)' : 'transparent',
+          background: activeTab === 'history' ? 'rgba(var(--accent-rgb), 0.05)' : 'transparent',
         }"
       >
         HISTORY

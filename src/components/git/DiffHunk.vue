@@ -65,7 +65,7 @@ const splitLines = computed(() => {
 <template>
   <div class="diff-hunk">
     <!-- Hunk header -->
-    <div class="hunk-header px-4 py-1" style="background: rgba(0, 212, 255, 0.1); color: var(--accent-cyan);">
+    <div class="hunk-header px-4 py-1" style="background: rgba(var(--accent-rgb), 0.1); color: var(--accent-cyan);">
       {{ hunk.header }}
     </div>
 

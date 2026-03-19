@@ -11,7 +11,7 @@ pub struct TerminalSession {
     pub shell: String,
     #[allow(dead_code)] // Retained for workspace restoration
     pub initial_cwd: String,
-    /// Current working directory (updated via OSC sequences or process queries)
+    /// Current working directory (updated via OSC sequences)
     current_cwd: Arc<Mutex<String>>,
     pty_pair: Arc<Mutex<PtyPair>>,
     writer: Arc<Mutex<Box<dyn Write + Send>>>,
@@ -52,9 +52,12 @@ impl TerminalSession {
             })
             .map_err(|e| format!("Failed to create PTY: {}", e))?;
 
-        // Build command - for PowerShell, inject a custom prompt that emits OSC 9;9 sequences
+        // Build command - inject shell integration for CWD reporting via OSC sequences
+        let shell_lower = shell.to_lowercase();
         let is_powershell =
-            shell.to_lowercase().contains("powershell") || shell.to_lowercase().contains("pwsh");
+            shell_lower.contains("powershell") || shell_lower.contains("pwsh");
+        let is_zsh = !is_powershell && shell_lower.contains("zsh");
+        let is_bash = !is_powershell && !is_zsh && shell_lower.contains("bash");
 
         let mut cmd = if is_powershell {
             let mut c = CommandBuilder::new(&shell);
@@ -63,6 +66,40 @@ impl TerminalSession {
             // Define a prompt function that emits OSC 9;9 with current directory
             // OSC 9;9;path ST where ST is ESC \ (0x1b 0x5c)
             c.arg(r#"function prompt { $p = $executionContext.SessionState.Path.CurrentLocation.Path; $e = [char]27; "$e]9;9;$p$e\PS $p> " }"#);
+            c
+        } else if is_zsh {
+            let mut c = CommandBuilder::new(&shell);
+
+            // Create a temporary ZDOTDIR with a .zshenv that:
+            // 1. Restores the original ZDOTDIR so user configs load normally
+            // 2. Adds a precmd hook to emit OSC 7 with the current directory
+            let zdotdir = std::env::temp_dir().join("mythicor-zsh-init");
+            let _ = std::fs::create_dir_all(&zdotdir);
+            let zshenv = r#"# Mythicor Terminal shell integration
+if [[ -n "$MYTHICOR_ORIG_ZDOTDIR" ]]; then
+    ZDOTDIR="$MYTHICOR_ORIG_ZDOTDIR"
+else
+    ZDOTDIR="$HOME"
+fi
+unset MYTHICOR_ORIG_ZDOTDIR
+[[ -f "$ZDOTDIR/.zshenv" ]] && source "$ZDOTDIR/.zshenv"
+__mythicor_precmd() { printf '\e]7;file://%s%s\e\\' "$HOST" "$PWD" }
+precmd_functions+=(__mythicor_precmd)
+"#;
+            let _ = std::fs::write(zdotdir.join(".zshenv"), zshenv);
+
+            let orig_zdotdir = std::env::var("ZDOTDIR").unwrap_or_default();
+            c.env("MYTHICOR_ORIG_ZDOTDIR", &orig_zdotdir);
+            c.env("ZDOTDIR", zdotdir.to_string_lossy().as_ref());
+
+            c
+        } else if is_bash {
+            let mut c = CommandBuilder::new(&shell);
+            // Set PROMPT_COMMAND to emit OSC 7 with current directory
+            c.env(
+                "PROMPT_COMMAND",
+                r#"printf '\e]7;file://%s%s\e\\' "$HOSTNAME" "$PWD""#,
+            );
             c
         } else {
             CommandBuilder::new(&shell)
@@ -146,172 +183,17 @@ impl TerminalSession {
         self.reader.clone()
     }
 
-    /// Get the process ID of the shell
-    #[allow(dead_code)] // Used by try_get_process_cwd for fallback CWD detection
-    pub fn get_pid(&self) -> Option<u32> {
-        self.child.lock().process_id()
-    }
-
     /// Update the current working directory (called when OSC sequences are parsed)
     pub fn set_cwd(&self, cwd: String) {
         *self.current_cwd.lock() = cwd;
     }
 
-    /// Get the current working directory
-    /// Returns the tracked CWD (from OSC sequences) or falls back to initial_cwd
+    /// Get the current working directory.
+    /// Returns the tracked CWD — starts as initial_cwd and is kept
+    /// up-to-date by OSC 7/9 sequences emitted by the shell's prompt hook.
     pub fn get_cwd(&self) -> Result<String, String> {
         Ok(self.current_cwd.lock().clone())
     }
-
-    /// Try to get CWD from process memory (Windows fallback)
-    #[cfg(windows)]
-    #[allow(dead_code)] // Reserved for fallback when OSC sequences unavailable
-    pub fn try_get_process_cwd(&self) -> Option<String> {
-        use windows::Win32::Foundation::CloseHandle;
-        use windows::Win32::System::Threading::{
-            OpenProcess, PROCESS_QUERY_INFORMATION, PROCESS_VM_READ,
-        };
-
-        let pid = self.get_pid()?;
-
-        unsafe {
-            let process_handle =
-                OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, false, pid).ok()?;
-
-            let result = get_process_cwd_internal(process_handle);
-            let _ = CloseHandle(process_handle);
-            result.ok()
-        }
-    }
-
-    #[cfg(target_os = "linux")]
-    #[allow(dead_code)] // Reserved for fallback when OSC sequences unavailable
-    pub fn try_get_process_cwd(&self) -> Option<String> {
-        // On Linux, read /proc/<pid>/cwd
-        let pid = self.get_pid()?;
-        std::fs::read_link(format!("/proc/{}/cwd", pid))
-            .map(|p| p.to_string_lossy().to_string())
-            .ok()
-    }
-
-    #[cfg(target_os = "macos")]
-    #[allow(dead_code)] // Reserved for fallback when OSC sequences unavailable
-    pub fn try_get_process_cwd(&self) -> Option<String> {
-        use std::process::Command;
-
-        let pid = self.get_pid()?;
-
-        // Use lsof to get the current working directory on macOS
-        // lsof -p <pid> -Fn outputs file descriptors, 'cwd' is the current directory
-        let output = Command::new("lsof")
-            .args(["-p", &pid.to_string(), "-Fn", "-d", "cwd"])
-            .output()
-            .ok()?;
-
-        if !output.status.success() {
-            return None;
-        }
-
-        let stdout = String::from_utf8_lossy(&output.stdout);
-        // Parse lsof output - lines starting with 'n' contain the path
-        for line in stdout.lines() {
-            if let Some(path) = line.strip_prefix('n') {
-                return Some(path.to_string());
-            }
-        }
-
-        None
-    }
-}
-
-#[cfg(windows)]
-#[allow(dead_code)] // Used by try_get_process_cwd
-unsafe fn get_process_cwd_internal(
-    process_handle: windows::Win32::Foundation::HANDLE,
-) -> Result<String, String> {
-    use ntapi::ntpsapi::{
-        NtQueryInformationProcess, ProcessBasicInformation, PROCESS_BASIC_INFORMATION,
-    };
-    use ntapi::ntrtl::RTL_USER_PROCESS_PARAMETERS;
-    use std::ffi::OsString;
-    use std::os::windows::ffi::OsStringExt;
-    use windows::Win32::System::Diagnostics::Debug::ReadProcessMemory;
-
-    // Get PEB address
-    let mut pbi: PROCESS_BASIC_INFORMATION = std::mem::zeroed();
-    let mut return_length: u32 = 0;
-
-    let status = NtQueryInformationProcess(
-        process_handle.0 as *mut _,
-        ProcessBasicInformation,
-        &mut pbi as *mut _ as *mut _,
-        std::mem::size_of::<PROCESS_BASIC_INFORMATION>() as u32,
-        &mut return_length,
-    );
-
-    if status != 0 {
-        return Err(format!("NtQueryInformationProcess failed: {:#x}", status));
-    }
-
-    // Read PEB (Process Environment Block - Windows standard term)
-    #[repr(C)]
-    #[allow(clippy::upper_case_acronyms)]
-    struct PEB {
-        reserved1: [u8; 2],
-        being_debugged: u8,
-        reserved2: [u8; 1],
-        reserved3: [*mut std::ffi::c_void; 2],
-        ldr: *mut std::ffi::c_void,
-        process_parameters: *mut RTL_USER_PROCESS_PARAMETERS,
-    }
-
-    let mut peb: PEB = std::mem::zeroed();
-    let mut bytes_read = 0usize;
-
-    let result = ReadProcessMemory(
-        process_handle,
-        pbi.PebBaseAddress as *const _,
-        &mut peb as *mut _ as *mut _,
-        std::mem::size_of::<PEB>(),
-        Some(&mut bytes_read),
-    );
-
-    if result.is_err() {
-        return Err("Failed to read PEB".to_string());
-    }
-
-    // Read RTL_USER_PROCESS_PARAMETERS
-    let mut params: RTL_USER_PROCESS_PARAMETERS = std::mem::zeroed();
-    let result = ReadProcessMemory(
-        process_handle,
-        peb.process_parameters as *const _,
-        &mut params as *mut _ as *mut _,
-        std::mem::size_of::<RTL_USER_PROCESS_PARAMETERS>(),
-        Some(&mut bytes_read),
-    );
-
-    if result.is_err() {
-        return Err("Failed to read process parameters".to_string());
-    }
-
-    // Read CurrentDirectory string
-    let cwd_length = params.CurrentDirectory.DosPath.Length as usize / 2;
-    let mut cwd_buffer: Vec<u16> = vec![0; cwd_length];
-
-    let result = ReadProcessMemory(
-        process_handle,
-        params.CurrentDirectory.DosPath.Buffer as *const _,
-        cwd_buffer.as_mut_ptr() as *mut _,
-        params.CurrentDirectory.DosPath.Length as usize,
-        Some(&mut bytes_read),
-    );
-
-    if result.is_err() {
-        return Err("Failed to read current directory".to_string());
-    }
-
-    let cwd = OsString::from_wide(&cwd_buffer);
-    Ok(cwd.to_string_lossy().to_string())
 }
 
 /// Detect the default shell on the system

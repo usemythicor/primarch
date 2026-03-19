@@ -156,7 +156,7 @@ function getRefColor(refType: string): string {
 }
 
 .commit-item.selected {
-  background: rgba(0, 212, 255, 0.1);
+  background: rgba(var(--accent-rgb), 0.1);
   border-left: 2px solid var(--accent-cyan);
 }
 

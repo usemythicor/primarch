@@ -87,7 +87,7 @@ function handleKeydown(e: KeyboardEvent) {
 }
 
 .commit-btn {
-  background: rgba(0, 212, 255, 0.1);
+  background: rgba(var(--accent-rgb), 0.1);
   border: 1px solid var(--accent-cyan);
   color: var(--accent-cyan);
   font-weight: 600;
@@ -97,8 +97,8 @@ function handleKeydown(e: KeyboardEvent) {
 }
 
 .commit-btn:hover:not(.disabled) {
-  background: rgba(0, 212, 255, 0.2);
-  box-shadow: 0 0 10px rgba(0, 212, 255, 0.2);
+  background: rgba(var(--accent-rgb), 0.2);
+  box-shadow: 0 0 10px rgba(var(--accent-rgb), 0.2);
 }
 
 .commit-btn.disabled {
