@@ -1,19 +1,21 @@
 # Mythicor Terminal
 
-A modern, workspace-aware terminal emulator for Windows built with [Tauri 2](https://tauri.app/) and [Vue 3](https://vuejs.org/).
+A modern, workspace-aware terminal emulator built with [Tauri 2](https://tauri.app/) and [Vue 3](https://vuejs.org/).
 
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
-![Platform](https://img.shields.io/badge/platform-Windows-lightgrey.svg)
+![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS-lightgrey.svg)
 ![Tauri](https://img.shields.io/badge/Tauri-2.x-orange.svg)
 
 ## Features
 
-- **Split Panes** - Divide your terminal into multiple panes (horizontal/vertical splits)
-- **Workspace Management** - Save and restore complex terminal layouts with working directories and startup commands
-- **Git Integration** - Built-in source control with staging, commits, diffs, branch switching, and history
-- **Multiple Shells** - Support for PowerShell, CMD, WSL, and Git Bash
-- **Theme Support** - 8 built-in color schemes (Dracula, One Dark, Monokai, Nord, and more)
-- **Customizable** - Configurable fonts, font sizes, and terminal themes
+- **Split Panes** — Divide your terminal into multiple panes (horizontal/vertical splits) with directory inheritance
+- **Workspace Management** — Save and restore complex terminal layouts with working directories and startup commands
+- **Git Integration** — Built-in source control with staging, commits, diffs, branch switching, history, pull/push
+- **AI Commit Messages** — Generate commit messages from staged diffs using Claude (Anthropic API)
+- **Multiple Shells** — Support for PowerShell, CMD, WSL, Git Bash, zsh, and bash
+- **Theme Support** — 8 built-in color schemes (Dracula, One Dark, Monokai, Nord, and more)
+- **Accent Colors** — 8 accent color presets (Cyan, Blue, Purple, Pink, Red, Orange, Gold, Green)
+- **Shell Integration** — Automatic CWD tracking via OSC 7 sequences for zsh, bash, and PowerShell
 
 ## Screenshots
 
@@ -23,11 +25,7 @@ A modern, workspace-aware terminal emulator for Windows built with [Tauri 2](htt
 
 ### Pre-built Binaries
 
-Download the latest release from the [Releases](https://github.com/mythicor/terminal/releases) page.
-
-Available formats:
-- **MSI** - Windows Installer package
-- **NSIS** - Executable installer
+Download the latest release from the [Releases](https://github.com/usemythicor/terminal/releases) page.
 
 ### Build from Source
 
@@ -41,7 +39,7 @@ Available formats:
 
 ```bash
 # Clone the repository
-git clone https://github.com/mythicor/terminal.git
+git clone https://github.com/usemythicor/terminal.git
 cd terminal
 
 # Install dependencies
@@ -62,23 +60,34 @@ Build outputs are located in `src-tauri/target/release/bundle/`.
 
 | Shortcut | Action |
 |----------|--------|
-| `Ctrl+Shift+D` | Split pane vertically |
-| `Ctrl+Shift+E` | Split pane horizontally |
+| `Ctrl+Shift+E` | Split pane horizontally (new pane below) |
+| `Ctrl+Shift+D` | Split pane vertically (new pane to the right) |
 | `Ctrl+Shift+W` | Close current pane |
 | `Ctrl+Tab` | Focus next pane |
 | `Ctrl+Shift+Tab` | Focus previous pane |
 | `Ctrl+Shift+S` | Toggle workspace manager |
+| `Ctrl+Shift+G` | Toggle git sidebar |
 | `Ctrl+,` | Toggle settings |
 
 ### Git Integration
 
 The git sidebar automatically detects repositories based on your terminal's current directory. Features include:
 
-- **Changes View** - Stage, unstage, and discard file changes
-- **Commit** - Create commits with a message
-- **Branch Switching** - Create, checkout, and delete branches
-- **History** - Browse commit history with diff viewing
-- **Remote Operations** - Fetch, pull, and push
+- **Changes View** — Stage, unstage, and discard file changes
+- **AI Commit Messages** — Generate commit messages from your staged diff with one click
+- **Commit** — Create commits with a message (or let AI write it)
+- **Branch Switching** — Create, checkout, and delete branches
+- **History** — Browse commit history with diff viewing
+- **Pull / Push** — Separate pull and push with commit count indicators
+
+### AI Commit Messages
+
+1. Open **Settings** (`Ctrl+,`)
+2. Paste your Anthropic API key in the **AI** section ([Get a key](https://console.anthropic.com/settings/keys))
+3. Stage some changes in the git sidebar
+4. Click the **AI** button above the commit message input
+
+Uses Claude Haiku — costs fractions of a cent per message.
 
 ### Workspaces
 
@@ -92,6 +101,7 @@ Save your current terminal layout (pane arrangement, working directories, shells
 - **State**: [Pinia](https://pinia.vuejs.org/)
 - **Styling**: [Tailwind CSS](https://tailwindcss.com/) v4
 - **Git**: [git2](https://crates.io/crates/git2) (libgit2 bindings)
+- **AI**: [Anthropic API](https://docs.anthropic.com/) (Claude Haiku)
 
 ## Project Structure
 
@@ -118,12 +128,14 @@ mythicor-terminal/
 ## Configuration
 
 Settings are stored in localStorage and include:
-- Terminal theme selection
+- Terminal theme and accent color
 - Font family and size
-- Default shell
+- Cursor style and blink
+- Anthropic API key (for AI commit messages)
 
 Workspaces are saved as JSON files in:
-- **Windows**: `%APPDATA%/com.mythicor.terminal/workspaces/`
+- **Windows**: `%APPDATA%/mythicor-terminal/workspaces/`
+- **macOS**: `~/Library/Application Support/mythicor-terminal/workspaces/`
 
 ## Contributing
 
@@ -135,6 +147,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## Acknowledgments
 
-- [Tauri](https://tauri.app/) - For the amazing cross-platform framework
-- [xterm.js](https://xtermjs.org/) - For the terminal emulator component
-- [git2-rs](https://github.com/rust-lang/git2-rs) - For git integration
+- [Tauri](https://tauri.app/) — Cross-platform desktop framework
+- [xterm.js](https://xtermjs.org/) — Terminal emulator component
+- [git2-rs](https://github.com/rust-lang/git2-rs) — Git integration
+- [Anthropic](https://anthropic.com/) — AI commit message generation
