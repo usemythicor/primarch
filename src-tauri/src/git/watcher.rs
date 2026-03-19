@@ -1,11 +1,11 @@
 use notify::{Config, RecommendedWatcher, RecursiveMode, Watcher};
+use parking_lot::RwLock;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::mpsc::channel;
 use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
-use parking_lot::RwLock;
 use tauri::{AppHandle, Emitter};
 
 /// Manages file system watchers for git repositories
@@ -42,14 +42,14 @@ impl WatcherManager {
         let repo_id_clone = repo_id.clone();
 
         // Create watcher with debouncing
-        let config = Config::default()
-            .with_poll_interval(Duration::from_secs(1));
+        let config = Config::default().with_poll_interval(Duration::from_secs(1));
 
         let mut watcher = RecommendedWatcher::new(tx, config)
             .map_err(|e| format!("Failed to create watcher: {}", e))?;
 
         // Watch the repository directory
-        watcher.watch(&repo_path, RecursiveMode::Recursive)
+        watcher
+            .watch(&repo_path, RecursiveMode::Recursive)
             .map_err(|e| format!("Failed to watch directory: {}", e))?;
 
         // Store the watcher
@@ -73,9 +73,10 @@ impl WatcherManager {
                 match rx.recv_timeout(Duration::from_millis(100)) {
                     Ok(Ok(event)) => {
                         // Ignore .git internal changes (too noisy)
-                        let dominated_by_git = event.paths.iter().all(|p| {
-                            p.components().any(|c| c.as_os_str() == ".git")
-                        });
+                        let dominated_by_git = event
+                            .paths
+                            .iter()
+                            .all(|p| p.components().any(|c| c.as_os_str() == ".git"));
 
                         if !dominated_by_git {
                             last_event_time = std::time::Instant::now();
@@ -107,7 +108,6 @@ impl WatcherManager {
     pub fn stop_watching(&self, repo_id: &str) {
         self.watchers.write().remove(repo_id);
     }
-
 }
 
 impl Default for WatcherManager {

@@ -2,7 +2,7 @@ mod git;
 mod pty;
 mod workspace;
 
-use git::{GitManager, GitStatus, BranchInfo, FileDiff, CommitInfo, WatcherManager};
+use git::{BranchInfo, CommitInfo, FileDiff, GitManager, GitStatus, WatcherManager};
 use parking_lot::RwLock;
 use pty::{detect_shells, PtyManager, ShellInfo};
 use std::io::Read;
@@ -121,7 +121,10 @@ fn start_terminal_reader(
                 }
                 Err(e) => {
                     eprintln!("Read error for session {}: {}", session_id_clone, e);
-                    let _ = app.emit(&format!("terminal-error-{}", session_id_clone), e.to_string());
+                    let _ = app.emit(
+                        &format!("terminal-error-{}", session_id_clone),
+                        e.to_string(),
+                    );
                     break;
                 }
             }
@@ -220,19 +223,13 @@ fn git_discover_repo(path: String) -> Result<String, String> {
 
 /// Open a git repository
 #[tauri::command]
-fn git_open_repo(
-    state: State<'_, Arc<RwLock<AppState>>>,
-    path: String,
-) -> Result<String, String> {
+fn git_open_repo(state: State<'_, Arc<RwLock<AppState>>>, path: String) -> Result<String, String> {
     state.read().git_manager.open_repository(&path)
 }
 
 /// Close a git repository
 #[tauri::command]
-fn git_close_repo(
-    state: State<'_, Arc<RwLock<AppState>>>,
-    repo_id: String,
-) -> Result<(), String> {
+fn git_close_repo(state: State<'_, Arc<RwLock<AppState>>>, repo_id: String) -> Result<(), String> {
     state.read().git_manager.close_repository(&repo_id)
 }
 
@@ -285,10 +282,7 @@ fn git_unstage_file(
 
 /// Stage all changes
 #[tauri::command]
-fn git_stage_all(
-    state: State<'_, Arc<RwLock<AppState>>>,
-    repo_id: String,
-) -> Result<(), String> {
+fn git_stage_all(state: State<'_, Arc<RwLock<AppState>>>, repo_id: String) -> Result<(), String> {
     state.read().git_manager.stage_all(&repo_id)
 }
 
@@ -310,7 +304,10 @@ fn git_diff_file(
     path: String,
     staged: bool,
 ) -> Result<FileDiff, String> {
-    state.read().git_manager.get_file_diff(&repo_id, &path, staged)
+    state
+        .read()
+        .git_manager
+        .get_file_diff(&repo_id, &path, staged)
 }
 
 /// Get diff for a file from a specific commit
@@ -321,7 +318,10 @@ fn git_diff_commit(
     commit_id: String,
     path: String,
 ) -> Result<FileDiff, String> {
-    state.read().git_manager.get_commit_file_diff(&repo_id, &commit_id, &path)
+    state
+        .read()
+        .git_manager
+        .get_commit_file_diff(&repo_id, &commit_id, &path)
 }
 
 /// Get diff stats (files changed, insertions, deletions)
@@ -386,7 +386,10 @@ fn git_log(
 ) -> Result<Vec<CommitInfo>, String> {
     let limit = limit.unwrap_or(50);
     let skip = skip.unwrap_or(0);
-    state.read().git_manager.get_commit_log(&repo_id, limit, skip)
+    state
+        .read()
+        .git_manager
+        .get_commit_log(&repo_id, limit, skip)
 }
 
 /// Get single commit info
@@ -406,7 +409,10 @@ fn git_commit_files(
     repo_id: String,
     commit_id: String,
 ) -> Result<Vec<String>, String> {
-    state.read().git_manager.get_commit_files(&repo_id, &commit_id)
+    state
+        .read()
+        .git_manager
+        .get_commit_files(&repo_id, &commit_id)
 }
 
 /// Start watching a repository for file changes
@@ -417,11 +423,10 @@ fn git_start_watcher(
     repo_id: String,
     repo_path: String,
 ) -> Result<(), String> {
-    state.read().watcher_manager.start_watching(
-        app,
-        repo_id,
-        std::path::PathBuf::from(repo_path),
-    )
+    state
+        .read()
+        .watcher_manager
+        .start_watching(app, repo_id, std::path::PathBuf::from(repo_path))
 }
 
 /// Stop watching a repository
@@ -443,7 +448,10 @@ fn git_checkout_branch(
     repo_id: String,
     branch_name: String,
 ) -> Result<(), String> {
-    state.read().git_manager.checkout_branch(&repo_id, &branch_name)
+    state
+        .read()
+        .git_manager
+        .checkout_branch(&repo_id, &branch_name)
 }
 
 /// Create a new branch
@@ -455,7 +463,10 @@ fn git_create_branch(
     checkout: Option<bool>,
 ) -> Result<(), String> {
     let checkout = checkout.unwrap_or(true);
-    state.read().git_manager.create_branch(&repo_id, &branch_name, checkout)
+    state
+        .read()
+        .git_manager
+        .create_branch(&repo_id, &branch_name, checkout)
 }
 
 /// Delete a branch
@@ -465,7 +476,10 @@ fn git_delete_branch(
     repo_id: String,
     branch_name: String,
 ) -> Result<(), String> {
-    state.read().git_manager.delete_branch(&repo_id, &branch_name)
+    state
+        .read()
+        .git_manager
+        .delete_branch(&repo_id, &branch_name)
 }
 
 // ============ Discard Commands ============
@@ -482,10 +496,7 @@ fn git_discard_file(
 
 /// Discard all unstaged changes
 #[tauri::command]
-fn git_discard_all(
-    state: State<'_, Arc<RwLock<AppState>>>,
-    repo_id: String,
-) -> Result<(), String> {
+fn git_discard_all(state: State<'_, Arc<RwLock<AppState>>>, repo_id: String) -> Result<(), String> {
     state.read().git_manager.discard_all_unstaged(&repo_id)
 }
 

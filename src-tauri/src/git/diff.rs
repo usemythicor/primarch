@@ -1,4 +1,4 @@
-use git2::{Repository, DiffOptions, DiffFormat};
+use git2::{DiffFormat, DiffOptions, Repository};
 use serde::Serialize;
 
 /// Represents a complete file diff
@@ -43,21 +43,14 @@ pub fn get_file_diff(repo: &Repository, path: &str, staged: bool) -> Result<File
 
     let diff = if staged {
         // Staged diff: HEAD vs Index
-        let head_tree = repo.head()
-            .ok()
-            .and_then(|h| h.peel_to_tree().ok());
+        let head_tree = repo.head().ok().and_then(|h| h.peel_to_tree().ok());
 
-        repo.diff_tree_to_index(
-            head_tree.as_ref(),
-            None,
-            Some(&mut diff_opts)
-        ).map_err(|e| format!("Failed to get staged diff: {}", e))?
+        repo.diff_tree_to_index(head_tree.as_ref(), None, Some(&mut diff_opts))
+            .map_err(|e| format!("Failed to get staged diff: {}", e))?
     } else {
         // Unstaged diff: Index vs Workdir
-        repo.diff_index_to_workdir(
-            None,
-            Some(&mut diff_opts)
-        ).map_err(|e| format!("Failed to get unstaged diff: {}", e))?
+        repo.diff_index_to_workdir(None, Some(&mut diff_opts))
+            .map_err(|e| format!("Failed to get unstaged diff: {}", e))?
     };
 
     // Parse the diff into our structure
@@ -127,7 +120,8 @@ pub fn get_file_diff(repo: &Repository, path: &str, staged: bool) -> Result<File
         }
 
         true
-    }).map_err(|e| format!("Failed to print diff: {}", e))?;
+    })
+    .map_err(|e| format!("Failed to print diff: {}", e))?;
 
     // Don't forget the last hunk
     if let Some(hunk) = current_hunk {
@@ -138,30 +132,35 @@ pub fn get_file_diff(repo: &Repository, path: &str, staged: bool) -> Result<File
 }
 
 /// Get diff for a specific file from a commit
-pub fn get_commit_file_diff(repo: &Repository, commit_id: &str, path: &str) -> Result<FileDiff, String> {
-    let oid = git2::Oid::from_str(commit_id)
-        .map_err(|e| format!("Invalid commit ID: {}", e))?;
+pub fn get_commit_file_diff(
+    repo: &Repository,
+    commit_id: &str,
+    path: &str,
+) -> Result<FileDiff, String> {
+    let oid = git2::Oid::from_str(commit_id).map_err(|e| format!("Invalid commit ID: {}", e))?;
 
-    let commit = repo.find_commit(oid)
+    let commit = repo
+        .find_commit(oid)
         .map_err(|e| format!("Commit not found: {}", e))?;
 
-    let commit_tree = commit.tree()
+    let commit_tree = commit
+        .tree()
         .map_err(|e| format!("Failed to get commit tree: {}", e))?;
 
     // Get parent tree (or empty tree for initial commit)
-    let parent_tree = commit.parent(0)
-        .ok()
-        .and_then(|p| p.tree().ok());
+    let parent_tree = commit.parent(0).ok().and_then(|p| p.tree().ok());
 
     let mut diff_opts = DiffOptions::new();
     diff_opts.pathspec(path);
     diff_opts.context_lines(3);
 
-    let diff = repo.diff_tree_to_tree(
-        parent_tree.as_ref(),
-        Some(&commit_tree),
-        Some(&mut diff_opts)
-    ).map_err(|e| format!("Failed to get commit diff: {}", e))?;
+    let diff = repo
+        .diff_tree_to_tree(
+            parent_tree.as_ref(),
+            Some(&commit_tree),
+            Some(&mut diff_opts),
+        )
+        .map_err(|e| format!("Failed to get commit diff: {}", e))?;
 
     // Parse the diff
     let mut file_diff = FileDiff {
@@ -224,7 +223,8 @@ pub fn get_commit_file_diff(repo: &Repository, commit_id: &str, path: &str) -> R
         }
 
         true
-    }).map_err(|e| format!("Failed to print diff: {}", e))?;
+    })
+    .map_err(|e| format!("Failed to print diff: {}", e))?;
 
     if let Some(hunk) = current_hunk {
         file_diff.hunks.push(hunk);
@@ -236,9 +236,7 @@ pub fn get_commit_file_diff(repo: &Repository, commit_id: &str, path: &str) -> R
 /// Get full diff stats for repository
 pub fn get_diff_stats(repo: &Repository, staged: bool) -> Result<(u32, u32, u32), String> {
     let diff = if staged {
-        let head_tree = repo.head()
-            .ok()
-            .and_then(|h| h.peel_to_tree().ok());
+        let head_tree = repo.head().ok().and_then(|h| h.peel_to_tree().ok());
 
         repo.diff_tree_to_index(head_tree.as_ref(), None, None)
             .map_err(|e| format!("Failed to get staged diff: {}", e))?
@@ -247,7 +245,8 @@ pub fn get_diff_stats(repo: &Repository, staged: bool) -> Result<(u32, u32, u32)
             .map_err(|e| format!("Failed to get unstaged diff: {}", e))?
     };
 
-    let stats = diff.stats()
+    let stats = diff
+        .stats()
         .map_err(|e| format!("Failed to get diff stats: {}", e))?;
 
     Ok((

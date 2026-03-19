@@ -75,10 +75,7 @@ fn detect_pwsh() -> Option<ShellInfo> {
 
 /// Detect Windows PowerShell
 fn detect_windows_powershell() -> Option<ShellInfo> {
-    let output = Command::new("where")
-        .arg("powershell.exe")
-        .output()
-        .ok()?;
+    let output = Command::new("where").arg("powershell.exe").output().ok()?;
 
     if output.status.success() {
         Some(ShellInfo {
@@ -121,9 +118,7 @@ fn detect_wsl_distros() -> Vec<ShellInfo> {
     let mut distros = Vec::new();
 
     // Run wsl --list --quiet to get distribution names
-    let output = Command::new("wsl.exe")
-        .args(["--list", "--quiet"])
-        .output();
+    let output = Command::new("wsl.exe").args(["--list", "--quiet"]).output();
 
     if let Ok(output) = output {
         if output.status.success() {

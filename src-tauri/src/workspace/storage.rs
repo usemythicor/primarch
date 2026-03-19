@@ -4,8 +4,8 @@ use std::path::PathBuf;
 
 /// Get the workspaces directory
 fn get_workspaces_dir() -> Result<PathBuf, String> {
-    let config_dir = dirs::config_dir()
-        .ok_or_else(|| "Could not find config directory".to_string())?;
+    let config_dir =
+        dirs::config_dir().ok_or_else(|| "Could not find config directory".to_string())?;
 
     let workspaces_dir = config_dir.join("mythicor-terminal").join("workspaces");
 
@@ -30,8 +30,7 @@ pub fn save_workspace(workspace: &Workspace) -> Result<(), String> {
     let json = serde_json::to_string_pretty(workspace)
         .map_err(|e| format!("Failed to serialize workspace: {}", e))?;
 
-    fs::write(&path, json)
-        .map_err(|e| format!("Failed to write workspace file: {}", e))?;
+    fs::write(&path, json).map_err(|e| format!("Failed to write workspace file: {}", e))?;
 
     Ok(())
 }
@@ -44,11 +43,11 @@ pub fn load_workspace(id: &str) -> Result<Workspace, String> {
         return Err(format!("Workspace {} not found", id));
     }
 
-    let json = fs::read_to_string(&path)
-        .map_err(|e| format!("Failed to read workspace file: {}", e))?;
+    let json =
+        fs::read_to_string(&path).map_err(|e| format!("Failed to read workspace file: {}", e))?;
 
-    let workspace: Workspace = serde_json::from_str(&json)
-        .map_err(|e| format!("Failed to parse workspace: {}", e))?;
+    let workspace: Workspace =
+        serde_json::from_str(&json).map_err(|e| format!("Failed to parse workspace: {}", e))?;
 
     Ok(workspace)
 }
@@ -58,8 +57,7 @@ pub fn delete_workspace(id: &str) -> Result<(), String> {
     let path = get_workspace_path(id)?;
 
     if path.exists() {
-        fs::remove_file(&path)
-            .map_err(|e| format!("Failed to delete workspace file: {}", e))?;
+        fs::remove_file(&path).map_err(|e| format!("Failed to delete workspace file: {}", e))?;
     }
 
     Ok(())
@@ -70,8 +68,8 @@ pub fn list_workspaces() -> Result<Vec<Workspace>, String> {
     let dir = get_workspaces_dir()?;
     let mut workspaces = Vec::new();
 
-    let entries = fs::read_dir(&dir)
-        .map_err(|e| format!("Failed to read workspaces directory: {}", e))?;
+    let entries =
+        fs::read_dir(&dir).map_err(|e| format!("Failed to read workspaces directory: {}", e))?;
 
     for entry in entries {
         let entry = entry.map_err(|e| format!("Failed to read directory entry: {}", e))?;

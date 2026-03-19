@@ -39,15 +39,18 @@ pub fn get_commit_log(
     limit: usize,
     skip: usize,
 ) -> Result<Vec<CommitInfo>, String> {
-    let mut revwalk = repo.revwalk()
+    let mut revwalk = repo
+        .revwalk()
         .map_err(|e| format!("Failed to create revwalk: {}", e))?;
 
     // Start from HEAD
-    revwalk.push_head()
+    revwalk
+        .push_head()
         .map_err(|e| format!("Failed to push HEAD: {}", e))?;
 
     // Sort by time, newest first
-    revwalk.set_sorting(Sort::TIME | Sort::TOPOLOGICAL)
+    revwalk
+        .set_sorting(Sort::TIME | Sort::TOPOLOGICAL)
         .map_err(|e| format!("Failed to set sorting: {}", e))?;
 
     // Build ref map for decorations
@@ -70,7 +73,8 @@ pub fn get_commit_log(
             break;
         }
 
-        let commit = repo.find_commit(oid)
+        let commit = repo
+            .find_commit(oid)
             .map_err(|e| format!("Failed to find commit: {}", e))?;
 
         let oid_str = oid.to_string();
@@ -99,12 +103,14 @@ fn build_ref_map(repo: &Repository) -> Result<HashMap<String, Vec<RefInfo>>, Str
     let mut ref_map: HashMap<String, Vec<RefInfo>> = HashMap::new();
 
     let head = repo.head().ok();
-    let head_name = head.as_ref()
+    let head_name = head
+        .as_ref()
         .and_then(|h| h.shorthand())
         .map(|s| s.to_string());
 
     // Iterate over all references
-    let refs = repo.references()
+    let refs = repo
+        .references()
         .map_err(|e| format!("Failed to list references: {}", e))?;
 
     for reference_result in refs {
@@ -153,10 +159,10 @@ fn build_ref_map(repo: &Repository) -> Result<HashMap<String, Vec<RefInfo>>, Str
 
 /// Get a single commit's full info
 pub fn get_commit(repo: &Repository, oid_str: &str) -> Result<CommitInfo, String> {
-    let oid = git2::Oid::from_str(oid_str)
-        .map_err(|e| format!("Invalid commit ID: {}", e))?;
+    let oid = git2::Oid::from_str(oid_str).map_err(|e| format!("Invalid commit ID: {}", e))?;
 
-    let commit = repo.find_commit(oid)
+    let commit = repo
+        .find_commit(oid)
         .map_err(|e| format!("Commit not found: {}", e))?;
 
     let ref_map = build_ref_map(repo)?;
@@ -186,20 +192,20 @@ pub fn get_commit(repo: &Repository, oid_str: &str) -> Result<CommitInfo, String
 
 /// Get files changed in a commit
 pub fn get_commit_files(repo: &Repository, oid_str: &str) -> Result<Vec<String>, String> {
-    let oid = git2::Oid::from_str(oid_str)
-        .map_err(|e| format!("Invalid commit ID: {}", e))?;
+    let oid = git2::Oid::from_str(oid_str).map_err(|e| format!("Invalid commit ID: {}", e))?;
 
-    let commit = repo.find_commit(oid)
+    let commit = repo
+        .find_commit(oid)
         .map_err(|e| format!("Commit not found: {}", e))?;
 
-    let tree = commit.tree()
+    let tree = commit
+        .tree()
         .map_err(|e| format!("Failed to get commit tree: {}", e))?;
 
-    let parent_tree = commit.parent(0)
-        .ok()
-        .and_then(|p| p.tree().ok());
+    let parent_tree = commit.parent(0).ok().and_then(|p| p.tree().ok());
 
-    let diff = repo.diff_tree_to_tree(parent_tree.as_ref(), Some(&tree), None)
+    let diff = repo
+        .diff_tree_to_tree(parent_tree.as_ref(), Some(&tree), None)
         .map_err(|e| format!("Failed to get diff: {}", e))?;
 
     let mut files = Vec::new();
@@ -214,7 +220,8 @@ pub fn get_commit_files(repo: &Repository, oid_str: &str) -> Result<Vec<String>,
         None,
         None,
         None,
-    ).map_err(|e| format!("Failed to iterate diff: {}", e))?;
+    )
+    .map_err(|e| format!("Failed to iterate diff: {}", e))?;
 
     Ok(files)
 }

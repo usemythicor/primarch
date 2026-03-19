@@ -1,6 +1,6 @@
-pub mod repository;
 pub mod diff;
 pub mod history;
+pub mod repository;
 pub mod watcher;
 
 pub use diff::FileDiff;
@@ -72,11 +72,11 @@ impl GitManager {
     /// Helper to open a repository by ID
     fn open_repo(&self, id: &str) -> Result<Repository, String> {
         let repos = self.repositories.read();
-        let path = repos.get(id)
+        let path = repos
+            .get(id)
             .ok_or_else(|| format!("Repository {} not found", id))?;
 
-        Repository::open(path)
-            .map_err(|e| format!("Failed to open repository: {}", e))
+        Repository::open(path).map_err(|e| format!("Failed to open repository: {}", e))
     }
 
     /// Discover a git repository from a given path
@@ -84,7 +84,8 @@ impl GitManager {
         let repo = Repository::discover(path)
             .map_err(|e| format!("Failed to discover repository: {}", e))?;
 
-        let workdir = repo.workdir()
+        let workdir = repo
+            .workdir()
             .ok_or_else(|| "Repository has no working directory".to_string())?;
 
         Ok(workdir.to_string_lossy().to_string())
@@ -93,17 +94,20 @@ impl GitManager {
     /// Register a repository path and return an ID
     pub fn open_repository(&self, path: &str) -> Result<String, String> {
         // Verify it's a valid repo first
-        Repository::open(path)
-            .map_err(|e| format!("Failed to open repository: {}", e))?;
+        Repository::open(path).map_err(|e| format!("Failed to open repository: {}", e))?;
 
         let id = uuid::Uuid::new_v4().to_string();
-        self.repositories.write().insert(id.clone(), PathBuf::from(path));
+        self.repositories
+            .write()
+            .insert(id.clone(), PathBuf::from(path));
         Ok(id)
     }
 
     /// Remove a repository from tracking
     pub fn close_repository(&self, id: &str) -> Result<(), String> {
-        self.repositories.write().remove(id)
+        self.repositories
+            .write()
+            .remove(id)
             .ok_or_else(|| format!("Repository {} not found", id))?;
         Ok(())
     }
@@ -157,7 +161,12 @@ impl GitManager {
     }
 
     /// Get diff for a file in a specific commit
-    pub fn get_commit_file_diff(&self, id: &str, commit_id: &str, path: &str) -> Result<FileDiff, String> {
+    pub fn get_commit_file_diff(
+        &self,
+        id: &str,
+        commit_id: &str,
+        path: &str,
+    ) -> Result<FileDiff, String> {
         let repo = self.open_repo(id)?;
         diff::get_commit_file_diff(&repo, commit_id, path)
     }
@@ -193,7 +202,12 @@ impl GitManager {
     }
 
     /// Get commit history
-    pub fn get_commit_log(&self, id: &str, limit: usize, skip: usize) -> Result<Vec<CommitInfo>, String> {
+    pub fn get_commit_log(
+        &self,
+        id: &str,
+        limit: usize,
+        skip: usize,
+    ) -> Result<Vec<CommitInfo>, String> {
         let repo = self.open_repo(id)?;
         history::get_commit_log(&repo, limit, skip)
     }

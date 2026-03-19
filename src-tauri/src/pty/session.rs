@@ -53,8 +53,8 @@ impl TerminalSession {
             .map_err(|e| format!("Failed to create PTY: {}", e))?;
 
         // Build command - for PowerShell, inject a custom prompt that emits OSC 9;9 sequences
-        let is_powershell = shell.to_lowercase().contains("powershell")
-            || shell.to_lowercase().contains("pwsh");
+        let is_powershell =
+            shell.to_lowercase().contains("powershell") || shell.to_lowercase().contains("pwsh");
 
         let mut cmd = if is_powershell {
             let mut c = CommandBuilder::new(&shell);
@@ -175,11 +175,8 @@ impl TerminalSession {
         let pid = self.get_pid()?;
 
         unsafe {
-            let process_handle = OpenProcess(
-                PROCESS_QUERY_INFORMATION | PROCESS_VM_READ,
-                false,
-                pid,
-            ).ok()?;
+            let process_handle =
+                OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, false, pid).ok()?;
 
             let result = get_process_cwd_internal(process_handle);
             let _ = CloseHandle(process_handle);
@@ -203,7 +200,9 @@ impl TerminalSession {
 unsafe fn get_process_cwd_internal(
     process_handle: windows::Win32::Foundation::HANDLE,
 ) -> Result<String, String> {
-    use ntapi::ntpsapi::{NtQueryInformationProcess, ProcessBasicInformation, PROCESS_BASIC_INFORMATION};
+    use ntapi::ntpsapi::{
+        NtQueryInformationProcess, ProcessBasicInformation, PROCESS_BASIC_INFORMATION,
+    };
     use ntapi::ntrtl::RTL_USER_PROCESS_PARAMETERS;
     use std::ffi::OsString;
     use std::os::windows::ffi::OsStringExt;

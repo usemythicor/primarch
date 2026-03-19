@@ -1,5 +1,8 @@
-use git2::{Repository, StatusOptions, BranchType, Signature, FetchOptions, PushOptions, RemoteCallbacks, Cred, CredentialType};
-use super::{GitStatus, FileStatus, FileStatusType, BranchInfo};
+use super::{BranchInfo, FileStatus, FileStatusType, GitStatus};
+use git2::{
+    BranchType, Cred, CredentialType, FetchOptions, PushOptions, RemoteCallbacks, Repository,
+    Signature, StatusOptions,
+};
 
 /// Get the full status of a repository
 pub fn get_repository_status(repo: &Repository) -> Result<GitStatus, String> {
@@ -9,7 +12,8 @@ pub fn get_repository_status(repo: &Repository) -> Result<GitStatus, String> {
         .include_ignored(false)
         .include_unmodified(false);
 
-    let statuses = repo.statuses(Some(&mut opts))
+    let statuses = repo
+        .statuses(Some(&mut opts))
         .map_err(|e| format!("Failed to get status: {}", e))?;
 
     let mut staged = Vec::new();
@@ -50,7 +54,8 @@ pub fn get_repository_status(repo: &Repository) -> Result<GitStatus, String> {
             staged.push(FileStatus {
                 path: path.clone(),
                 status: FileStatusType::Renamed,
-                old_path: entry.head_to_index()
+                old_path: entry
+                    .head_to_index()
                     .and_then(|d| d.old_file().path())
                     .map(|p| p.to_string_lossy().to_string()),
             });
@@ -81,7 +86,8 @@ pub fn get_repository_status(repo: &Repository) -> Result<GitStatus, String> {
             unstaged.push(FileStatus {
                 path: path.clone(),
                 status: FileStatusType::Renamed,
-                old_path: entry.index_to_workdir()
+                old_path: entry
+                    .index_to_workdir()
                     .and_then(|d| d.old_file().path())
                     .map(|p| p.to_string_lossy().to_string()),
             });
@@ -125,7 +131,7 @@ fn get_branch_tracking_info(repo: &Repository) -> (Option<String>, Option<String
     // Get upstream branch
     let branch = match repo.find_branch(
         branch_name.as_ref().map(|s| s.as_str()).unwrap_or(""),
-        BranchType::Local
+        BranchType::Local,
     ) {
         Ok(b) => b,
         Err(_) => return (branch_name, None, 0, 0),
@@ -138,10 +144,11 @@ fn get_branch_tracking_info(repo: &Repository) -> (Option<String>, Option<String
 
     // Calculate ahead/behind
     let (ahead, behind) = if let Some(ref _upstream_name) = upstream {
-        match (branch.get().target(), branch.upstream().ok().and_then(|u| u.get().target())) {
-            (Some(local), Some(remote)) => {
-                repo.graph_ahead_behind(local, remote).unwrap_or((0, 0))
-            }
+        match (
+            branch.get().target(),
+            branch.upstream().ok().and_then(|u| u.get().target()),
+        ) {
+            (Some(local), Some(remote)) => repo.graph_ahead_behind(local, remote).unwrap_or((0, 0)),
             _ => (0, 0),
         }
     } else {
@@ -153,10 +160,12 @@ fn get_branch_tracking_info(repo: &Repository) -> (Option<String>, Option<String
 
 /// Get info about the current branch
 pub fn get_current_branch(repo: &Repository) -> Result<BranchInfo, String> {
-    let head = repo.head()
+    let head = repo
+        .head()
         .map_err(|e| format!("Failed to get HEAD: {}", e))?;
 
-    let name = head.shorthand()
+    let name = head
+        .shorthand()
         .map(|s| s.to_string())
         .unwrap_or_else(|| "HEAD".to_string());
 
@@ -164,15 +173,20 @@ pub fn get_current_branch(repo: &Repository) -> Result<BranchInfo, String> {
 
     // Get upstream info
     let (upstream, ahead, behind) = if head.is_branch() {
-        let branch = repo.find_branch(&name, BranchType::Local)
+        let branch = repo
+            .find_branch(&name, BranchType::Local)
             .map_err(|e| format!("Failed to find branch: {}", e))?;
 
-        let upstream = branch.upstream()
+        let upstream = branch
+            .upstream()
             .ok()
             .and_then(|u| u.name().ok().flatten().map(|s| s.to_string()));
 
         let (a, b) = if upstream.is_some() {
-            match (branch.get().target(), branch.upstream().ok().and_then(|u| u.get().target())) {
+            match (
+                branch.get().target(),
+                branch.upstream().ok().and_then(|u| u.get().target()),
+            ) {
                 (Some(local), Some(remote)) => {
                     repo.graph_ahead_behind(local, remote).unwrap_or((0, 0))
                 }
@@ -201,31 +215,37 @@ pub fn list_branches(repo: &Repository) -> Result<Vec<BranchInfo>, String> {
     let mut branches = Vec::new();
 
     let head = repo.head().ok();
-    let head_name = head.as_ref()
+    let head_name = head
+        .as_ref()
         .and_then(|h| h.shorthand())
         .map(|s| s.to_string());
 
     // Local branches
-    let local_branches = repo.branches(Some(BranchType::Local))
+    let local_branches = repo
+        .branches(Some(BranchType::Local))
         .map_err(|e| format!("Failed to list branches: {}", e))?;
 
     for branch_result in local_branches {
-        let (branch, _) = branch_result
-            .map_err(|e| format!("Failed to read branch: {}", e))?;
+        let (branch, _) = branch_result.map_err(|e| format!("Failed to read branch: {}", e))?;
 
-        let name = branch.name()
+        let name = branch
+            .name()
             .map_err(|e| format!("Failed to get branch name: {}", e))?
             .unwrap_or("")
             .to_string();
 
         let is_head = Some(&name) == head_name.as_ref();
 
-        let upstream = branch.upstream()
+        let upstream = branch
+            .upstream()
             .ok()
             .and_then(|u| u.name().ok().flatten().map(|s| s.to_string()));
 
         let (ahead, behind) = if upstream.is_some() {
-            match (branch.get().target(), branch.upstream().ok().and_then(|u| u.get().target())) {
+            match (
+                branch.get().target(),
+                branch.upstream().ok().and_then(|u| u.get().target()),
+            ) {
                 (Some(local), Some(remote)) => {
                     repo.graph_ahead_behind(local, remote).unwrap_or((0, 0))
                 }
@@ -249,24 +269,29 @@ pub fn list_branches(repo: &Repository) -> Result<Vec<BranchInfo>, String> {
 
 /// Stage a single file
 pub fn stage_file(repo: &Repository, path: &str) -> Result<(), String> {
-    let mut index = repo.index()
+    let mut index = repo
+        .index()
         .map_err(|e| format!("Failed to get index: {}", e))?;
 
     // Check if file exists or was deleted
-    let full_path = repo.workdir()
+    let full_path = repo
+        .workdir()
         .ok_or("Repository has no working directory")?
         .join(path);
 
     if full_path.exists() {
-        index.add_path(std::path::Path::new(path))
+        index
+            .add_path(std::path::Path::new(path))
             .map_err(|e| format!("Failed to stage file: {}", e))?;
     } else {
         // File was deleted, remove from index
-        index.remove_path(std::path::Path::new(path))
+        index
+            .remove_path(std::path::Path::new(path))
             .map_err(|e| format!("Failed to stage deletion: {}", e))?;
     }
 
-    index.write()
+    index
+        .write()
         .map_err(|e| format!("Failed to write index: {}", e))?;
 
     Ok(())
@@ -274,31 +299,40 @@ pub fn stage_file(repo: &Repository, path: &str) -> Result<(), String> {
 
 /// Unstage a single file
 pub fn unstage_file(repo: &Repository, path: &str) -> Result<(), String> {
-    let head = repo.head()
+    let head = repo
+        .head()
         .map_err(|e| format!("Failed to get HEAD: {}", e))?;
 
-    let head_commit = head.peel_to_commit()
+    let head_commit = head
+        .peel_to_commit()
         .map_err(|e| format!("Failed to get HEAD commit: {}", e))?;
 
-    repo.reset_default(Some(&head_commit.as_object()), &[std::path::Path::new(path)])
-        .map_err(|e| format!("Failed to unstage file: {}", e))?;
+    repo.reset_default(
+        Some(&head_commit.as_object()),
+        &[std::path::Path::new(path)],
+    )
+    .map_err(|e| format!("Failed to unstage file: {}", e))?;
 
     Ok(())
 }
 
 /// Stage all changes
 pub fn stage_all(repo: &Repository) -> Result<(), String> {
-    let mut index = repo.index()
+    let mut index = repo
+        .index()
         .map_err(|e| format!("Failed to get index: {}", e))?;
 
-    index.add_all(["*"].iter(), git2::IndexAddOption::DEFAULT, None)
+    index
+        .add_all(["*"].iter(), git2::IndexAddOption::DEFAULT, None)
         .map_err(|e| format!("Failed to stage all: {}", e))?;
 
     // Handle deleted files
-    index.update_all(["*"].iter(), None)
+    index
+        .update_all(["*"].iter(), None)
         .map_err(|e| format!("Failed to update index: {}", e))?;
 
-    index.write()
+    index
+        .write()
         .map_err(|e| format!("Failed to write index: {}", e))?;
 
     Ok(())
@@ -306,24 +340,29 @@ pub fn stage_all(repo: &Repository) -> Result<(), String> {
 
 /// Create a new commit
 pub fn create_commit(repo: &Repository, message: &str) -> Result<String, String> {
-    let mut index = repo.index()
+    let mut index = repo
+        .index()
         .map_err(|e| format!("Failed to get index: {}", e))?;
 
-    let tree_oid = index.write_tree()
+    let tree_oid = index
+        .write_tree()
         .map_err(|e| format!("Failed to write tree: {}", e))?;
 
-    let tree = repo.find_tree(tree_oid)
+    let tree = repo
+        .find_tree(tree_oid)
         .map_err(|e| format!("Failed to find tree: {}", e))?;
 
     // Get signature from config or use default
-    let sig = repo.signature()
+    let sig = repo
+        .signature()
         .or_else(|_| Signature::now("Unknown", "unknown@example.com"))
         .map_err(|e| format!("Failed to create signature: {}", e))?;
 
     // Get parent commit (HEAD)
     let parents = match repo.head() {
         Ok(head) => {
-            let commit = head.peel_to_commit()
+            let commit = head
+                .peel_to_commit()
                 .map_err(|e| format!("Failed to get HEAD commit: {}", e))?;
             vec![commit]
         }
@@ -332,22 +371,17 @@ pub fn create_commit(repo: &Repository, message: &str) -> Result<String, String>
 
     let parent_refs: Vec<&git2::Commit> = parents.iter().collect();
 
-    let oid = repo.commit(
-        Some("HEAD"),
-        &sig,
-        &sig,
-        message,
-        &tree,
-        &parent_refs,
-    ).map_err(|e| format!("Failed to create commit: {}", e))?;
+    let oid = repo
+        .commit(Some("HEAD"), &sig, &sig, message, &tree, &parent_refs)
+        .map_err(|e| format!("Failed to create commit: {}", e))?;
 
     Ok(oid.to_string())
 }
 
 /// Get credentials from git credential helper (supports Git Credential Manager)
 fn get_credentials_from_helper(url: &str) -> Option<(String, String)> {
-    use std::process::{Command, Stdio};
     use std::io::Write;
+    use std::process::{Command, Stdio};
 
     // Parse URL to extract protocol and host (e.g., "https://github.com/user/repo.git")
     let protocol = if url.starts_with("https://") {
@@ -445,25 +479,17 @@ fn create_remote_callbacks<'a>() -> RemoteCallbacks<'a> {
             let ssh_pub = std::path::Path::new(&home).join(".ssh").join("id_rsa.pub");
 
             if ssh_key.exists() {
-                return Cred::ssh_key(
-                    username,
-                    Some(&ssh_pub),
-                    &ssh_key,
-                    None,
-                );
+                return Cred::ssh_key(username, Some(&ssh_pub), &ssh_key, None);
             }
 
             // Try ed25519 key
             let ssh_key = std::path::Path::new(&home).join(".ssh").join("id_ed25519");
-            let ssh_pub = std::path::Path::new(&home).join(".ssh").join("id_ed25519.pub");
+            let ssh_pub = std::path::Path::new(&home)
+                .join(".ssh")
+                .join("id_ed25519.pub");
 
             if ssh_key.exists() {
-                return Cred::ssh_key(
-                    username,
-                    Some(&ssh_pub),
-                    &ssh_key,
-                    None,
-                );
+                return Cred::ssh_key(username, Some(&ssh_pub), &ssh_key, None);
             }
         }
 
@@ -475,7 +501,8 @@ fn create_remote_callbacks<'a>() -> RemoteCallbacks<'a> {
 
 /// Fetch from remote
 pub fn fetch(repo: &Repository, remote_name: &str) -> Result<(), String> {
-    let mut remote = repo.find_remote(remote_name)
+    let mut remote = repo
+        .find_remote(remote_name)
         .map_err(|e| format!("Remote '{}' not found: {}", remote_name, e))?;
 
     let callbacks = create_remote_callbacks();
@@ -483,7 +510,8 @@ pub fn fetch(repo: &Repository, remote_name: &str) -> Result<(), String> {
     fetch_opts.remote_callbacks(callbacks);
 
     // Fetch all branches
-    remote.fetch(&[] as &[&str], Some(&mut fetch_opts), None)
+    remote
+        .fetch(&[] as &[&str], Some(&mut fetch_opts), None)
         .map_err(|e| format!("Fetch failed: {}", e))?;
 
     Ok(())
@@ -495,25 +523,28 @@ pub fn pull(repo: &Repository, remote_name: &str) -> Result<String, String> {
     fetch(repo, remote_name)?;
 
     // Get current branch
-    let head = repo.head()
+    let head = repo
+        .head()
         .map_err(|e| format!("Failed to get HEAD: {}", e))?;
 
     if !head.is_branch() {
         return Err("HEAD is not on a branch".to_string());
     }
 
-    let branch_name = head.shorthand()
-        .ok_or("Invalid branch name")?;
+    let branch_name = head.shorthand().ok_or("Invalid branch name")?;
 
     // Get upstream reference
-    let fetch_head = repo.find_reference("FETCH_HEAD")
+    let fetch_head = repo
+        .find_reference("FETCH_HEAD")
         .map_err(|e| format!("No FETCH_HEAD found: {}", e))?;
 
-    let fetch_commit = repo.reference_to_annotated_commit(&fetch_head)
+    let fetch_commit = repo
+        .reference_to_annotated_commit(&fetch_head)
         .map_err(|e| format!("Failed to get fetch commit: {}", e))?;
 
     // Perform merge analysis
-    let (analysis, _) = repo.merge_analysis(&[&fetch_commit])
+    let (analysis, _) = repo
+        .merge_analysis(&[&fetch_commit])
         .map_err(|e| format!("Merge analysis failed: {}", e))?;
 
     if analysis.is_up_to_date() {
@@ -523,10 +554,12 @@ pub fn pull(repo: &Repository, remote_name: &str) -> Result<String, String> {
     if analysis.is_fast_forward() {
         // Fast-forward merge
         let refname = format!("refs/heads/{}", branch_name);
-        let mut reference = repo.find_reference(&refname)
+        let mut reference = repo
+            .find_reference(&refname)
             .map_err(|e| format!("Failed to find branch reference: {}", e))?;
 
-        reference.set_target(fetch_commit.id(), "Fast-forward")
+        reference
+            .set_target(fetch_commit.id(), "Fast-forward")
             .map_err(|e| format!("Failed to fast-forward: {}", e))?;
 
         repo.set_head(&refname)
@@ -548,17 +581,18 @@ pub fn pull(repo: &Repository, remote_name: &str) -> Result<String, String> {
 
 /// Push to remote
 pub fn push(repo: &Repository, remote_name: &str) -> Result<(), String> {
-    let head = repo.head()
+    let head = repo
+        .head()
         .map_err(|e| format!("Failed to get HEAD: {}", e))?;
 
     if !head.is_branch() {
         return Err("HEAD is not on a branch".to_string());
     }
 
-    let branch_name = head.shorthand()
-        .ok_or("Invalid branch name")?;
+    let branch_name = head.shorthand().ok_or("Invalid branch name")?;
 
-    let mut remote = repo.find_remote(remote_name)
+    let mut remote = repo
+        .find_remote(remote_name)
         .map_err(|e| format!("Remote '{}' not found: {}", remote_name, e))?;
 
     let callbacks = create_remote_callbacks();
@@ -567,7 +601,8 @@ pub fn push(repo: &Repository, remote_name: &str) -> Result<(), String> {
 
     let refspec = format!("refs/heads/{}:refs/heads/{}", branch_name, branch_name);
 
-    remote.push(&[&refspec], Some(&mut push_opts))
+    remote
+        .push(&[&refspec], Some(&mut push_opts))
         .map_err(|e| format!("Push failed: {}", e))?;
 
     Ok(())
@@ -575,10 +610,12 @@ pub fn push(repo: &Repository, remote_name: &str) -> Result<(), String> {
 
 /// Get list of remotes
 pub fn list_remotes(repo: &Repository) -> Result<Vec<String>, String> {
-    let remotes = repo.remotes()
+    let remotes = repo
+        .remotes()
         .map_err(|e| format!("Failed to list remotes: {}", e))?;
 
-    Ok(remotes.iter()
+    Ok(remotes
+        .iter()
         .filter_map(|r| r.map(|s| s.to_string()))
         .collect())
 }
@@ -600,8 +637,9 @@ pub fn checkout_branch(repo: &Repository, branch_name: &str) -> Result<(), Strin
     repo.checkout_head(Some(
         git2::build::CheckoutBuilder::default()
             .safe()
-            .recreate_missing(true)
-    )).map_err(|e| format!("Failed to checkout: {}", e))?;
+            .recreate_missing(true),
+    ))
+    .map_err(|e| format!("Failed to checkout: {}", e))?;
 
     Ok(())
 }
@@ -609,10 +647,12 @@ pub fn checkout_branch(repo: &Repository, branch_name: &str) -> Result<(), Strin
 /// Create a new branch
 pub fn create_branch(repo: &Repository, branch_name: &str, checkout: bool) -> Result<(), String> {
     // Get HEAD commit
-    let head = repo.head()
+    let head = repo
+        .head()
         .map_err(|e| format!("Failed to get HEAD: {}", e))?;
 
-    let commit = head.peel_to_commit()
+    let commit = head
+        .peel_to_commit()
         .map_err(|e| format!("Failed to get HEAD commit: {}", e))?;
 
     // Create the branch
@@ -630,7 +670,8 @@ pub fn create_branch(repo: &Repository, branch_name: &str, checkout: bool) -> Re
 /// Delete a branch
 pub fn delete_branch(repo: &Repository, branch_name: &str) -> Result<(), String> {
     // Prevent deleting the current branch
-    let head = repo.head()
+    let head = repo
+        .head()
         .map_err(|e| format!("Failed to get HEAD: {}", e))?;
 
     if let Some(head_name) = head.shorthand() {
@@ -640,10 +681,12 @@ pub fn delete_branch(repo: &Repository, branch_name: &str) -> Result<(), String>
     }
 
     // Find and delete the branch
-    let mut branch = repo.find_branch(branch_name, BranchType::Local)
+    let mut branch = repo
+        .find_branch(branch_name, BranchType::Local)
         .map_err(|e| format!("Branch '{}' not found: {}", branch_name, e))?;
 
-    branch.delete()
+    branch
+        .delete()
         .map_err(|e| format!("Failed to delete branch '{}': {}", branch_name, e))?;
 
     Ok(())
@@ -657,21 +700,20 @@ pub fn discard_file(repo: &Repository, path: &str) -> Result<(), String> {
 
     // Check if file is untracked (not in HEAD)
     let head = repo.head().ok();
-    let tree = head.as_ref()
-        .and_then(|h| h.peel_to_tree().ok());
+    let tree = head.as_ref().and_then(|h| h.peel_to_tree().ok());
 
     if let Some(tree) = tree {
         // Check if file exists in tree (tracked file)
         if tree.get_path(path_obj).is_ok() {
             // Tracked file - checkout from HEAD
             repo.checkout_head(Some(
-                git2::build::CheckoutBuilder::default()
-                    .force()
-                    .path(path)
-            )).map_err(|e| format!("Failed to discard changes: {}", e))?;
+                git2::build::CheckoutBuilder::default().force().path(path),
+            ))
+            .map_err(|e| format!("Failed to discard changes: {}", e))?;
         } else {
             // Untracked file - delete it
-            let workdir = repo.workdir()
+            let workdir = repo
+                .workdir()
                 .ok_or("Repository has no working directory")?;
             let full_path = workdir.join(path);
             if full_path.exists() {
@@ -686,7 +728,8 @@ pub fn discard_file(repo: &Repository, path: &str) -> Result<(), String> {
         }
     } else {
         // No HEAD (initial commit state) - just delete the file
-        let workdir = repo.workdir()
+        let workdir = repo
+            .workdir()
             .ok_or("Repository has no working directory")?;
         let full_path = workdir.join(path);
         if full_path.exists() {
@@ -705,16 +748,18 @@ pub fn discard_all_unstaged(repo: &Repository) -> Result<(), String> {
         Some(
             git2::build::CheckoutBuilder::default()
                 .force()
-                .recreate_missing(true)
-        )
-    ).map_err(|e| format!("Failed to discard all changes: {}", e))?;
+                .recreate_missing(true),
+        ),
+    )
+    .map_err(|e| format!("Failed to discard all changes: {}", e))?;
 
     Ok(())
 }
 
 /// Clean untracked files
 pub fn clean_untracked(repo: &Repository, paths: Option<Vec<String>>) -> Result<u32, String> {
-    let workdir = repo.workdir()
+    let workdir = repo
+        .workdir()
         .ok_or("Repository has no working directory")?;
 
     let mut opts = git2::StatusOptions::new();
@@ -722,7 +767,8 @@ pub fn clean_untracked(repo: &Repository, paths: Option<Vec<String>>) -> Result<
         .recurse_untracked_dirs(true)
         .include_ignored(false);
 
-    let statuses = repo.statuses(Some(&mut opts))
+    let statuses = repo
+        .statuses(Some(&mut opts))
         .map_err(|e| format!("Failed to get status: {}", e))?;
 
     let mut removed_count = 0;

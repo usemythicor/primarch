@@ -81,7 +81,6 @@ impl PtyManager {
             Err(format!("Session {} not found", id))
         }
     }
-
 }
 
 impl Default for PtyManager {
