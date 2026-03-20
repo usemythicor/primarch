@@ -65,12 +65,12 @@ jobs:
       matrix:
         include:
           - os: windows-latest
-            artifact-name: mythicor-terminal-windows
+            artifact-name: primarch-windows
             artifact-path: |
               src-tauri/target/release/bundle/msi/*.msi
               src-tauri/target/release/bundle/nsis/*.exe
           - os: macos-latest
-            artifact-name: mythicor-terminal-macos
+            artifact-name: primarch-macos
             artifact-path: |
               src-tauri/target/release/bundle/dmg/*.dmg
               src-tauri/target/release/bundle/macos/*.app

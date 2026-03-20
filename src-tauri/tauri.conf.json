@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "Mythicor Terminal",
+  "productName": "Primarch",
   "version": "0.1.0",
-  "identifier": "com.mythicor.terminal",
+  "identifier": "sh.primarch.app",
   "build": {
     "beforeDevCommand": "npm run dev",
     "devUrl": "http://localhost:1420",
@@ -12,13 +12,14 @@
   "app": {
     "windows": [
       {
-        "title": "Mythicor Terminal",
+        "title": "Primarch",
         "width": 1200,
         "height": 800,
         "minWidth": 600,
         "minHeight": 400,
-        "decorations": true,
-        "resizable": true
+        "decorations": false,
+        "resizable": true,
+        "transparent": false
       }
     ],
     "security": {

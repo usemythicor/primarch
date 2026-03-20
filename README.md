@@ -1,4 +1,4 @@
-# Mythicor Terminal
+# Primarch.sh
 
 A modern, workspace-aware terminal emulator built with [Tauri 2](https://tauri.app/) and [Vue 3](https://vuejs.org/).
 
@@ -13,7 +13,7 @@ A modern, workspace-aware terminal emulator built with [Tauri 2](https://tauri.a
 - **Git Integration** — Built-in source control with staging, commits, diffs, branch switching, history, pull/push
 - **AI Commit Messages** — Generate commit messages from staged diffs using Claude (Anthropic API)
 - **Multiple Shells** — Support for PowerShell, CMD, WSL, Git Bash, zsh, and bash
-- **Theme Support** — 8 built-in color schemes (Dracula, One Dark, Monokai, Nord, and more)
+- **Theme Support** — 20 built-in color schemes including light and dark themes
 - **Accent Colors** — 8 accent color presets (Cyan, Blue, Purple, Pink, Red, Orange, Gold, Green)
 - **Shell Integration** — Automatic CWD tracking via OSC 7 sequences for zsh, bash, and PowerShell
 
@@ -25,7 +25,7 @@ A modern, workspace-aware terminal emulator built with [Tauri 2](https://tauri.a
 
 ### Pre-built Binaries
 
-Download the latest release from the [Releases](https://github.com/usemythicor/terminal/releases) page.
+Download the latest release from the [Releases](https://github.com/primarch-sh/terminal/releases) page.
 
 ### Build from Source
 
@@ -39,7 +39,7 @@ Download the latest release from the [Releases](https://github.com/usemythicor/t
 
 ```bash
 # Clone the repository
-git clone https://github.com/usemythicor/terminal.git
+git clone https://github.com/primarch-sh/terminal.git
 cd terminal
 
 # Install dependencies
@@ -106,7 +106,7 @@ Save your current terminal layout (pane arrangement, working directories, shells
 ## Project Structure
 
 ```
-mythicor-terminal/
+primarch/
 ├── src/                    # Vue frontend
 │   ├── components/         # Vue components
 │   │   ├── terminal/       # Terminal pane components
@@ -134,8 +134,8 @@ Settings are stored in localStorage and include:
 - Anthropic API key (for AI commit messages)
 
 Workspaces are saved as JSON files in:
-- **Windows**: `%APPDATA%/mythicor-terminal/workspaces/`
-- **macOS**: `~/Library/Application Support/mythicor-terminal/workspaces/`
+- **Windows**: `%APPDATA%/primarch/workspaces/`
+- **macOS**: `~/Library/Application Support/primarch/workspaces/`
 
 ## Contributing
 

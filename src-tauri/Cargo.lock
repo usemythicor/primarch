@@ -2800,29 +2800,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "mythicor-terminal"
-version = "0.1.0"
-dependencies = [
- "dirs 5.0.1",
- "git2",
- "image",
- "notify",
- "ntapi",
- "parking_lot",
- "portable-pty",
- "reqwest 0.12.28",
- "serde",
- "serde_json",
- "tauri",
- "tauri-build",
- "tauri-plugin-clipboard-manager",
- "tauri-plugin-opener",
- "tokio",
- "uuid",
- "windows 0.58.0",
-]
-
-[[package]]
 name = "native-tls"
 version = "0.2.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3657,6 +3634,29 @@ checksum = "479ca8adacdd7ce8f1fb39ce9ecccbfe93a3f1344b3d0d97f20bc0196208f62b"
 dependencies = [
  "proc-macro2",
  "syn 2.0.117",
+]
+
+[[package]]
+name = "primarch"
+version = "0.1.0"
+dependencies = [
+ "dirs 5.0.1",
+ "git2",
+ "image",
+ "notify",
+ "ntapi",
+ "parking_lot",
+ "portable-pty",
+ "reqwest 0.12.28",
+ "serde",
+ "serde_json",
+ "tauri",
+ "tauri-build",
+ "tauri-plugin-clipboard-manager",
+ "tauri-plugin-opener",
+ "tokio",
+ "uuid",
+ "windows 0.58.0",
 ]
 
 [[package]]

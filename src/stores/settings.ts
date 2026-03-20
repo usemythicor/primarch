@@ -3,7 +3,7 @@ import { ref, computed, watch } from 'vue';
 import type { Theme } from '../types';
 import { themes, getThemeById, getDefaultTheme } from '../themes/presets';
 
-const STORAGE_KEY = 'mythicor-terminal-settings';
+const STORAGE_KEY = 'primarch-settings';
 
 interface Settings {
   themeId: string;
@@ -70,8 +70,42 @@ export const useSettingsStore = defineStore('settings', () => {
     root.style.setProperty('--accent-rgb', `${r}, ${g}, ${b}`);
   }
 
+  // Apply light/dark mode CSS variables
+  function applyColorMode(isLight: boolean) {
+    const root = document.documentElement;
+    if (isLight) {
+      // Light mode
+      root.style.setProperty('--bg-primary', '#ffffff');
+      root.style.setProperty('--bg-secondary', '#f8f9fa');
+      root.style.setProperty('--bg-tertiary', '#f0f1f3');
+      root.style.setProperty('--bg-elevated', '#ffffff');
+      root.style.setProperty('--bg-hover', '#e9ecef');
+      root.style.setProperty('--border-subtle', '#e0e3e7');
+      root.style.setProperty('--border-default', '#ced4da');
+      root.style.setProperty('--border-strong', '#adb5bd');
+      root.style.setProperty('--text-primary', '#1a1d21');
+      root.style.setProperty('--text-secondary', '#495057');
+      root.style.setProperty('--text-muted', '#868e96');
+    } else {
+      // Dark mode (defaults)
+      root.style.setProperty('--bg-primary', '#06080c');
+      root.style.setProperty('--bg-secondary', '#0a0d12');
+      root.style.setProperty('--bg-tertiary', '#0f1318');
+      root.style.setProperty('--bg-elevated', '#141820');
+      root.style.setProperty('--bg-hover', '#1a1f28');
+      root.style.setProperty('--border-subtle', '#1a1f28');
+      root.style.setProperty('--border-default', '#252a35');
+      root.style.setProperty('--border-strong', '#3a4150');
+      root.style.setProperty('--text-primary', '#e8eaed');
+      root.style.setProperty('--text-secondary', '#8b9099');
+      root.style.setProperty('--text-muted', '#5a6270');
+    }
+  }
+
   // Apply on init
   applyAccentColor(accentColor.value);
+  const initialTheme = getThemeById(themeId.value);
+  applyColorMode(initialTheme?.light ?? false);
 
   // Computed
   const currentTheme = computed((): Theme => {
@@ -109,10 +143,15 @@ export const useSettingsStore = defineStore('settings', () => {
     },
   }));
 
+  // Computed
+  const isLightTheme = computed(() => currentTheme.value.light ?? false);
+
   // Actions
   function setTheme(id: string) {
-    if (getThemeById(id)) {
+    const theme = getThemeById(id);
+    if (theme) {
       themeId.value = id;
+      applyColorMode(theme.light ?? false);
     }
   }
 
@@ -151,6 +190,7 @@ export const useSettingsStore = defineStore('settings', () => {
     cursorStyle.value = defaultSettings.cursorStyle;
     accentColor.value = defaultSettings.accentColor;
     applyAccentColor(defaultSettings.accentColor);
+    applyColorMode(false); // Default theme (Dracula) is dark
     anthropicApiKey.value = defaultSettings.anthropicApiKey;
   }
 
@@ -185,6 +225,7 @@ export const useSettingsStore = defineStore('settings', () => {
     currentTheme,
     availableThemes,
     terminalOptions,
+    isLightTheme,
 
     // Actions
     setTheme,

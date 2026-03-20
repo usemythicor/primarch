@@ -1,12 +1,12 @@
 [package]
-name = "mythicor-terminal"
+name = "primarch"
 version = "0.1.0"
 description = "A workspace-aware terminal emulator"
 authors = ["casey"]
 edition = "2021"
 
 [lib]
-name = "mythicor_terminal_lib"
+name = "primarch_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]

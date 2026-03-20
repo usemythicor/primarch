@@ -1,11 +1,15 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, computed, watch } from 'vue';
+import { getCurrentWindow } from '@tauri-apps/api/window';
 import {
   FolderIcon,
   Cog6ToothIcon,
   CommandLineIcon,
   CodeBracketIcon,
   ArrowPathRoundedSquareIcon,
+  MinusIcon,
+  StopIcon,
+  XMarkIcon,
 } from '@heroicons/vue/24/outline';
 import PaneContainer from './components/layout/PaneContainer.vue';
 import ShellSelector from './components/terminal/ShellSelector.vue';
@@ -16,6 +20,32 @@ import DiffViewer from './components/git/DiffViewer.vue';
 import { useLayoutStore } from './stores/layout';
 import { useSettingsStore } from './stores/settings';
 import { useGitStore } from './stores/git';
+
+// Window controls
+const appWindow = getCurrentWindow();
+const isMaximized = ref(false);
+
+function minimizeWindow() {
+  appWindow.minimize();
+}
+
+function toggleMaximize() {
+  appWindow.toggleMaximize();
+}
+
+function closeWindow() {
+  appWindow.close();
+}
+
+// Start dragging the window
+function startDrag() {
+  appWindow.startDragging();
+}
+
+// Track maximize state
+async function updateMaximizedState() {
+  isMaximized.value = await appWindow.isMaximized();
+}
 
 interface ShellInfo {
   id: string;
@@ -139,13 +169,16 @@ watch(terminalBg, (bg) => {
   document.body.style.background = bg;
 }, { immediate: true });
 
-onMounted(() => {
+onMounted(async () => {
   window.addEventListener('keydown', handleKeydown);
   // Set initial background
   document.documentElement.style.background = terminalBg.value;
   document.body.style.background = terminalBg.value;
   // Start watching for CWD changes to update git
   gitStore.startCwdWatcher();
+  // Track window maximize state
+  isMaximized.value = await appWindow.isMaximized();
+  appWindow.onResized(updateMaximizedState);
 });
 
 onUnmounted(() => {
@@ -158,68 +191,84 @@ onUnmounted(() => {
   <div class="h-screen w-screen flex flex-col" :style="{ background: terminalBg }">
     <!-- Title bar -->
     <div
-      class="flex items-center justify-between px-4 h-10 select-none"
+      class="flex items-center justify-between h-10 select-none"
       style="background: var(--bg-primary);"
     >
-      <!-- Left side - Logo and title -->
-      <div class="flex items-center gap-4">
+      <!-- Left side - Logo, title and actions (draggable area) -->
+      <div
+        class="flex items-center gap-4 flex-1 h-full px-4"
+        @mousedown="startDrag"
+        @dblclick="toggleMaximize"
+      >
         <div class="flex items-center gap-2">
           <div class="w-1 h-4 rounded-sm" style="background: var(--accent-cyan);"></div>
-          <span class="text-header" style="color: var(--text-primary);">MYTHICOR</span>
+          <span class="text-header" style="color: var(--text-primary);">PRIMARCH</span>
         </div>
         <div class="flex items-center gap-2" style="color: var(--text-muted);">
           <CommandLineIcon class="w-3.5 h-3.5" />
           <span class="text-label">{{ terminalCount }} ACTIVE</span>
         </div>
+
+        <!-- Actions - stop propagation to prevent drag -->
+        <div class="flex items-center gap-2 ml-auto" @mousedown.stop>
+          <button
+            @click="showWorkspaceManager = !showWorkspaceManager; showSettings = false"
+            class="btn-toolbar px-3 py-1.5"
+            :class="{ 'btn-toolbar-active': showWorkspaceManager }"
+            title="Workspaces (Ctrl+Shift+S)"
+          >
+            <FolderIcon class="w-3.5 h-3.5" />
+            <span class="text-label">Workspaces</span>
+          </button>
+
+          <div class="w-px h-4" style="background: var(--border-default);"></div>
+
+          <!-- Split buttons -->
+          <div class="tooltip-wrapper relative" @mouseenter="showTooltip($event, 'Split Down  Ctrl+Shift+E')" @mouseleave="hideTooltip">
+            <button
+              @click="layoutStore.splitVertical()"
+              class="btn-toolbar"
+            >
+              <svg class="w-3.5 h-3.5" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1.5" y="1.5" width="13" height="13" rx="1.5" /><line x1="1.5" y1="8" x2="14.5" y2="8" /></svg>
+            </button>
+          </div>
+
+          <div class="tooltip-wrapper relative" @mouseenter="showTooltip($event, 'Split Right  Ctrl+Shift+D')" @mouseleave="hideTooltip">
+            <button
+              @click="layoutStore.splitHorizontal()"
+              class="btn-toolbar"
+            >
+              <svg class="w-3.5 h-3.5" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1.5" y="1.5" width="13" height="13" rx="1.5" /><line x1="8" y1="1.5" x2="8" y2="14.5" /></svg>
+            </button>
+          </div>
+
+          <ShellSelector @select="handleShellSelect" />
+        </div>
       </div>
 
-      <!-- Right side - Actions -->
-      <div class="flex items-center gap-2">
+      <!-- Window controls -->
+      <div class="flex items-center h-full">
         <button
-          @click="showWorkspaceManager = !showWorkspaceManager; showSettings = false"
-          class="btn-toolbar px-3 py-1.5"
-          :class="{ 'btn-toolbar-active': showWorkspaceManager }"
-          title="Workspaces (Ctrl+Shift+S)"
+          @click="minimizeWindow"
+          class="window-control h-full px-4 flex items-center justify-center transition-colors"
+          title="Minimize"
         >
-          <FolderIcon class="w-3.5 h-3.5" />
-          <span class="text-label">Workspaces</span>
+          <MinusIcon class="w-4 h-4" />
         </button>
-
-        <div class="w-px h-4" style="background: var(--border-default);"></div>
-
-        <!-- Split buttons -->
-        <div class="tooltip-wrapper relative" @mouseenter="showTooltip($event, 'Split Down  Ctrl+Shift+E')" @mouseleave="hideTooltip">
-          <button
-            @click="layoutStore.splitVertical()"
-            class="btn-toolbar"
-          >
-            <svg class="w-3.5 h-3.5" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1.5" y="1.5" width="13" height="13" rx="1.5" /><line x1="1.5" y1="8" x2="14.5" y2="8" /></svg>
-          </button>
-        </div>
-
-        <div class="tooltip-wrapper relative" @mouseenter="showTooltip($event, 'Split Right  Ctrl+Shift+D')" @mouseleave="hideTooltip">
-          <button
-            @click="layoutStore.splitHorizontal()"
-            class="btn-toolbar"
-          >
-            <svg class="w-3.5 h-3.5" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1.5" y="1.5" width="13" height="13" rx="1.5" /><line x1="8" y1="1.5" x2="8" y2="14.5" /></svg>
-          </button>
-        </div>
-
-        <ShellSelector @select="handleShellSelect" />
-
         <button
-          @click="showSettings = !showSettings; showWorkspaceManager = false"
-          class="btn-icon"
-          :class="{ 'btn-toolbar-active': showSettings }"
-          title="Settings (Ctrl+,)"
+          @click="toggleMaximize"
+          class="window-control h-full px-4 flex items-center justify-center transition-colors"
+          :title="isMaximized ? 'Restore' : 'Maximize'"
         >
-          <Cog6ToothIcon class="w-4 h-4" />
+          <StopIcon class="w-3.5 h-3.5" />
         </button>
-
-        <div class="w-px h-4" style="background: var(--border-default);"></div>
-
-        <span class="text-label" style="color: var(--text-muted);">v0.1.0</span>
+        <button
+          @click="closeWindow"
+          class="window-control window-control-close h-full px-4 flex items-center justify-center transition-colors"
+          title="Close"
+        >
+          <XMarkIcon class="w-4 h-4" />
+        </button>
       </div>
     </div>
 
@@ -320,7 +369,7 @@ onUnmounted(() => {
     <!-- Status bar -->
     <div
       class="flex items-center justify-between px-4 h-6 select-none"
-      style="background: var(--bg-primary);"
+      style="background: var(--bg-primary); border-top: 1px solid var(--border-subtle);"
     >
       <div class="flex items-center gap-4">
         <!-- Git branch info -->
@@ -356,6 +405,21 @@ onUnmounted(() => {
           </template>
           <span v-else class="text-label" style="color: var(--text-muted);">No Repository</span>
         </div>
+      </div>
+
+      <!-- Right side - Settings and version -->
+      <div class="flex items-center gap-3">
+        <button
+          @click="showSettings = !showSettings; showWorkspaceManager = false"
+          class="flex items-center gap-1.5 transition-colors hover:opacity-80"
+          :class="{ 'text-accent': showSettings }"
+          :style="{ color: showSettings ? 'var(--accent-cyan)' : 'var(--text-muted)' }"
+          title="Settings (Ctrl+,)"
+        >
+          <Cog6ToothIcon class="w-3 h-3" />
+          <span class="text-label">Settings</span>
+        </button>
+        <span class="text-label" style="color: var(--text-muted);">v0.1.0</span>
       </div>
     </div>
 

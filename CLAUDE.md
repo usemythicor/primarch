@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Mythicor Terminal is a workspace-aware terminal emulator for Windows built with Tauri 2.x and Vue 3. It allows users to save and restore complex split-pane terminal layouts with working directories and startup commands.
+Primarch.sh is a workspace-aware terminal emulator for Windows built with Tauri 2.x and Vue 3. It allows users to save and restore complex split-pane terminal layouts with working directories and startup commands.
 
 ## Tech Stack
 
@@ -95,7 +95,7 @@ src/
 │   ├── workspace.ts            # Workspace management (Pinia)
 │   └── settings.ts             # Settings with localStorage (Pinia)
 ├── themes/
-│   └── presets.ts              # 8 color scheme presets
+│   └── presets.ts              # 20 color scheme presets (dark + light)
 ├── types/
 │   └── index.ts                # TypeScript interfaces
 ├── assets/
@@ -121,14 +121,8 @@ src/
 - `Ctrl+,` - Toggle settings
 
 **Available Themes:**
-- Dracula (default)
-- One Dark
-- Monokai
-- Nord
-- Solarized Dark
-- GitHub Dark
-- Gruvbox Dark
-- Tokyo Night
+- Dark: Dracula, One Dark, Monokai, Nord, Solarized Dark, GitHub Dark, Gruvbox Dark, Tokyo Night, Catppuccin Mocha, Ayu Dark, Synthwave '84, Palenight, Rosé Pine
+- Light: Solarized Light, GitHub Light, One Light, Gruvbox Light, Catppuccin Latte, Rosé Pine Dawn, Tokyo Night Light
 
 ## Layout System
 
@@ -145,9 +139,9 @@ Layout operations in `LayoutTree.ts`:
 ## Data Storage
 
 Workspaces are saved as JSON files in the user's config directory:
-- Windows: `%APPDATA%/com.mythicor.terminal/workspaces/`
+- Windows: `%APPDATA%/primarch/workspaces/`
 
-Settings are stored in localStorage under the key `mythicor-terminal-settings`.
+Settings are stored in localStorage under the key `primarch-settings`.
 
 ## Build Output
 

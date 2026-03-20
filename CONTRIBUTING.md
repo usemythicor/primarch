@@ -1,6 +1,6 @@
-# Contributing to Mythicor Terminal
+# Contributing to Primarch.sh
 
-Thank you for your interest in contributing to Mythicor Terminal! This document provides guidelines and instructions for contributing.
+Thank you for your interest in contributing to Primarch.sh! This document provides guidelines and instructions for contributing.
 
 ## Code of Conduct
 
@@ -18,7 +18,7 @@ Please be respectful and constructive in all interactions. We're building someth
 
 ```bash
 # Clone the repository
-git clone https://github.com/mythicor/terminal.git
+git clone https://github.com/primarch-sh/terminal.git
 cd terminal
 
 # Install dependencies

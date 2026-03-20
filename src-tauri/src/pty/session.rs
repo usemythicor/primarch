@@ -73,23 +73,23 @@ impl TerminalSession {
             // Create a temporary ZDOTDIR with a .zshenv that:
             // 1. Restores the original ZDOTDIR so user configs load normally
             // 2. Adds a precmd hook to emit OSC 7 with the current directory
-            let zdotdir = std::env::temp_dir().join("mythicor-zsh-init");
+            let zdotdir = std::env::temp_dir().join("primarch-zsh-init");
             let _ = std::fs::create_dir_all(&zdotdir);
-            let zshenv = r#"# Mythicor Terminal shell integration
-if [[ -n "$MYTHICOR_ORIG_ZDOTDIR" ]]; then
-    ZDOTDIR="$MYTHICOR_ORIG_ZDOTDIR"
+            let zshenv = r#"# Primarch shell integration
+if [[ -n "$PRIMARCH_ORIG_ZDOTDIR" ]]; then
+    ZDOTDIR="$PRIMARCH_ORIG_ZDOTDIR"
 else
     ZDOTDIR="$HOME"
 fi
-unset MYTHICOR_ORIG_ZDOTDIR
+unset PRIMARCH_ORIG_ZDOTDIR
 [[ -f "$ZDOTDIR/.zshenv" ]] && source "$ZDOTDIR/.zshenv"
-__mythicor_precmd() { printf '\e]7;file://%s%s\e\\' "$HOST" "$PWD" }
-precmd_functions+=(__mythicor_precmd)
+__primarch_precmd() { printf '\e]7;file://%s%s\e\\' "$HOST" "$PWD" }
+precmd_functions+=(__primarch_precmd)
 "#;
             let _ = std::fs::write(zdotdir.join(".zshenv"), zshenv);
 
             let orig_zdotdir = std::env::var("ZDOTDIR").unwrap_or_default();
-            c.env("MYTHICOR_ORIG_ZDOTDIR", &orig_zdotdir);
+            c.env("PRIMARCH_ORIG_ZDOTDIR", &orig_zdotdir);
             c.env("ZDOTDIR", zdotdir.to_string_lossy().as_ref());
 
             c
@@ -109,7 +109,7 @@ precmd_functions+=(__mythicor_precmd)
 
         // Set environment variables for shell integration (OSC sequences)
         // This enables PowerShell 7.2+ to emit OSC 9;9 sequences with current directory
-        cmd.env("TERM_PROGRAM", "MythicorTerminal");
+        cmd.env("TERM_PROGRAM", "Primarch");
         cmd.env("TERM_PROGRAM_VERSION", "0.1.0");
 
         // Spawn the shell

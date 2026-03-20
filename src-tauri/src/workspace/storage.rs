@@ -7,7 +7,7 @@ fn get_workspaces_dir() -> Result<PathBuf, String> {
     let config_dir =
         dirs::config_dir().ok_or_else(|| "Could not find config directory".to_string())?;
 
-    let workspaces_dir = config_dir.join("mythicor-terminal").join("workspaces");
+    let workspaces_dir = config_dir.join("primarch").join("workspaces");
 
     // Create directory if it doesn't exist
     if !workspaces_dir.exists() {

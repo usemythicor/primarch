@@ -519,7 +519,7 @@ fn save_clipboard_image(rgba_data: Vec<u8>, width: u32, height: u32) -> Result<S
     use std::time::{SystemTime, UNIX_EPOCH};
 
     // Create temp directory for clipboard images
-    let temp_dir = std::env::temp_dir().join("mythicor-clipboard");
+    let temp_dir = std::env::temp_dir().join("primarch-clipboard");
     std::fs::create_dir_all(&temp_dir)
         .map_err(|e| format!("Failed to create temp directory: {}", e))?;
 

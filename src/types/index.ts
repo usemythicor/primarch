@@ -39,6 +39,7 @@ export interface ShellProfile {
 export interface Theme {
   id: string;
   name: string;
+  light?: boolean;
   background: string;
   foreground: string;
   cursor: string;

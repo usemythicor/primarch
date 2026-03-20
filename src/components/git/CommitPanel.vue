@@ -9,10 +9,10 @@ const gitStore = useGitStore();
 const settingsStore = useSettingsStore();
 
 // Resizable panel logic
-const STORAGE_KEY = 'mythicor-commit-panel-height';
-const MIN_HEIGHT = 100;
+const STORAGE_KEY = 'primarch-commit-panel-height';
+const MIN_HEIGHT = 150;
 const MAX_HEIGHT = 400;
-const DEFAULT_HEIGHT = 140;
+const DEFAULT_HEIGHT = 150;
 
 const panelHeight = ref(DEFAULT_HEIGHT);
 const isResizing = ref(false);

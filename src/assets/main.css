@@ -1,6 +1,6 @@
 @import "tailwindcss";
 
-/* Mythicor Terminal Design System */
+/* Primarch.sh Design System */
 :root {
   /* Base colors - deep dark with blue tint */
   --bg-primary: #06080c;
@@ -261,4 +261,22 @@ body {
 
 .glow-red {
   box-shadow: 0 0 20px rgba(255, 71, 87, 0.15);
+}
+
+/* Window controls */
+.window-control {
+  color: var(--text-muted);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+}
+
+.window-control:hover {
+  color: var(--text-primary);
+  background: var(--bg-hover);
+}
+
+.window-control-close:hover {
+  color: #ffffff;
+  background: #e81123;
 }
