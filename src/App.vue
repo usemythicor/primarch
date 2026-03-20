@@ -87,6 +87,26 @@ function hideTooltip() {
 }
 const terminalBg = computed(() => settingsStore.currentTheme.background);
 const showGitSidebar = computed(() => gitStore.sidebarVisible);
+
+// Status bar notification
+const statusNotification = ref<string | null>(null);
+let notificationTimer: ReturnType<typeof setTimeout> | null = null;
+
+function showStatusNotification(message: string, duration = 5000) {
+  if (notificationTimer) clearTimeout(notificationTimer);
+  statusNotification.value = message;
+  notificationTimer = setTimeout(() => {
+    statusNotification.value = null;
+  }, duration);
+}
+
+// Watch for AI CLI detection
+watch(() => settingsStore.availableAiClis, (clis) => {
+  if (clis.length > 0) {
+    const names = clis.map(c => c === 'claude' ? 'Claude Max' : c === 'codex' ? 'Codex' : c).join(', ');
+    showStatusNotification(`${names} detected - AI commit messages enabled`);
+  }
+}, { immediate: true });
 const gitChangeCount = computed(() => gitStore.changeCount);
 const showDiffViewer = computed(() => gitStore.diffVisible);
 const gitBranchName = computed(() => gitStore.branchName);
@@ -368,7 +388,7 @@ onUnmounted(() => {
 
     <!-- Status bar -->
     <div
-      class="flex items-center justify-between px-4 h-6 select-none"
+      class="flex items-center justify-between px-4 h-6 select-none relative"
       style="background: var(--bg-primary); border-top: 1px solid var(--border-subtle);"
     >
       <div class="flex items-center gap-4">
@@ -406,6 +426,24 @@ onUnmounted(() => {
           <span v-else class="text-label" style="color: var(--text-muted);">No Repository</span>
         </div>
       </div>
+
+      <!-- Status notification (center) -->
+      <Transition
+        enter-active-class="transition duration-300 ease-out"
+        enter-from-class="opacity-0"
+        enter-to-class="opacity-100"
+        leave-active-class="transition duration-500 ease-in"
+        leave-from-class="opacity-100"
+        leave-to-class="opacity-0"
+      >
+        <span
+          v-if="statusNotification"
+          class="absolute left-1/2 -translate-x-1/2 text-label"
+          style="color: var(--text-muted);"
+        >
+          {{ statusNotification }}
+        </span>
+      </Transition>
 
       <!-- Right side - Settings and version -->
       <div class="flex items-center gap-3">

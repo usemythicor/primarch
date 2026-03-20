@@ -28,6 +28,8 @@ const cursorBlink = computed(() => settingsStore.cursorBlink);
 const currentAccent = computed(() => settingsStore.accentColor);
 
 const hasKey = computed(() => !!settingsStore.anthropicApiKey);
+const aiProvider = computed(() => settingsStore.aiProvider);
+const availableAiClis = computed(() => settingsStore.availableAiClis);
 const showThemePicker = ref(false);
 
 function selectTheme(id: string) {
@@ -300,42 +302,176 @@ function resetSettings() {
       <div>
         <div class="flex items-center gap-2 mb-4">
           <SparklesIcon class="w-4 h-4" style="color: var(--accent-cyan);" />
-          <span class="text-header">AI</span>
+          <span class="text-header">AI COMMIT MESSAGES</span>
         </div>
-        <div class="flex items-center gap-2">
-          <input
-            v-model="settingsStore.anthropicApiKey"
-            :type="hasKey ? 'password' : 'text'"
-            :placeholder="hasKey ? '' : 'sk-ant-...'"
-            class="flex-1 px-3 py-2 transition-all duration-150"
-            style="
-              background: var(--bg-primary);
-              border: 1px solid var(--border-default);
-              color: var(--text-primary);
-              font-family: var(--font-mono);
-              font-size: 0.7rem;
-            "
-          />
+
+        <!-- Provider Selection -->
+        <div class="space-y-2 mb-4">
           <button
-            v-if="hasKey"
-            @click="settingsStore.setAnthropicApiKey('')"
-            class="btn-icon btn-icon-danger"
-            title="Remove key"
+            @click="settingsStore.setAiProvider('none')"
+            class="w-full flex items-center gap-3 px-3 py-2.5 transition-all duration-150 text-left"
+            :style="{
+              background: aiProvider === 'none' ? 'rgba(var(--accent-rgb), 0.08)' : 'var(--bg-tertiary)',
+              border: aiProvider === 'none' ? '1px solid var(--accent-cyan)' : '1px solid var(--border-subtle)',
+            }"
           >
-            <XMarkIcon class="w-3.5 h-3.5" />
+            <div
+              class="w-3 h-3 rounded-full border-2 flex items-center justify-center"
+              :style="{
+                borderColor: aiProvider === 'none' ? 'var(--accent-cyan)' : 'var(--text-muted)',
+              }"
+            >
+              <div
+                v-if="aiProvider === 'none'"
+                class="w-1.5 h-1.5 rounded-full"
+                style="background: var(--accent-cyan);"
+              ></div>
+            </div>
+            <div class="flex-1">
+              <span class="text-label" :style="{ color: aiProvider === 'none' ? 'var(--accent-cyan)' : 'var(--text-secondary)' }">
+                Disabled
+              </span>
+            </div>
+          </button>
+
+          <button
+            v-if="availableAiClis.includes('claude')"
+            @click="settingsStore.setAiProvider('claude')"
+            class="w-full flex items-center gap-3 px-3 py-2.5 transition-all duration-150 text-left"
+            :style="{
+              background: aiProvider === 'claude' ? 'rgba(var(--accent-rgb), 0.08)' : 'var(--bg-tertiary)',
+              border: aiProvider === 'claude' ? '1px solid var(--accent-cyan)' : '1px solid var(--border-subtle)',
+            }"
+          >
+            <div
+              class="w-3 h-3 rounded-full border-2 flex items-center justify-center"
+              :style="{
+                borderColor: aiProvider === 'claude' ? 'var(--accent-cyan)' : 'var(--text-muted)',
+              }"
+            >
+              <div
+                v-if="aiProvider === 'claude'"
+                class="w-1.5 h-1.5 rounded-full"
+                style="background: var(--accent-cyan);"
+              ></div>
+            </div>
+            <div class="flex-1">
+              <span class="text-label" :style="{ color: aiProvider === 'claude' ? 'var(--accent-cyan)' : 'var(--text-secondary)' }">
+                Claude Code CLI
+              </span>
+              <span class="text-label ml-2" style="color: var(--accent-green); font-size: 0.55rem;">FREE</span>
+            </div>
+          </button>
+
+          <button
+            v-if="availableAiClis.includes('codex')"
+            @click="settingsStore.setAiProvider('codex')"
+            class="w-full flex items-center gap-3 px-3 py-2.5 transition-all duration-150 text-left"
+            :style="{
+              background: aiProvider === 'codex' ? 'rgba(var(--accent-rgb), 0.08)' : 'var(--bg-tertiary)',
+              border: aiProvider === 'codex' ? '1px solid var(--accent-cyan)' : '1px solid var(--border-subtle)',
+            }"
+          >
+            <div
+              class="w-3 h-3 rounded-full border-2 flex items-center justify-center"
+              :style="{
+                borderColor: aiProvider === 'codex' ? 'var(--accent-cyan)' : 'var(--text-muted)',
+              }"
+            >
+              <div
+                v-if="aiProvider === 'codex'"
+                class="w-1.5 h-1.5 rounded-full"
+                style="background: var(--accent-cyan);"
+              ></div>
+            </div>
+            <div class="flex-1">
+              <span class="text-label" :style="{ color: aiProvider === 'codex' ? 'var(--accent-cyan)' : 'var(--text-secondary)' }">
+                Codex CLI
+              </span>
+              <span class="text-label ml-2" style="color: var(--accent-green); font-size: 0.55rem;">FREE</span>
+            </div>
+          </button>
+
+          <button
+            @click="settingsStore.setAiProvider('api')"
+            class="w-full flex items-center gap-3 px-3 py-2.5 transition-all duration-150 text-left"
+            :style="{
+              background: aiProvider === 'api' ? 'rgba(var(--accent-rgb), 0.08)' : 'var(--bg-tertiary)',
+              border: aiProvider === 'api' ? '1px solid var(--accent-cyan)' : '1px solid var(--border-subtle)',
+            }"
+          >
+            <div
+              class="w-3 h-3 rounded-full border-2 flex items-center justify-center"
+              :style="{
+                borderColor: aiProvider === 'api' ? 'var(--accent-cyan)' : 'var(--text-muted)',
+              }"
+            >
+              <div
+                v-if="aiProvider === 'api'"
+                class="w-1.5 h-1.5 rounded-full"
+                style="background: var(--accent-cyan);"
+              ></div>
+            </div>
+            <div class="flex-1">
+              <span class="text-label" :style="{ color: aiProvider === 'api' ? 'var(--accent-cyan)' : 'var(--text-secondary)' }">
+                Anthropic API
+              </span>
+              <span class="text-label ml-2" style="color: var(--text-muted); font-size: 0.55rem;">REQUIRES KEY</span>
+            </div>
           </button>
         </div>
 
-        <div class="flex items-center justify-between mt-2">
-          <span style="font-size: 0.6rem; color: var(--text-muted);">Used for AI commit messages. Stored locally.</span>
-          <a
-            href="https://console.anthropic.com/settings/keys"
-            target="_blank"
-            class="text-label transition-colors"
-            style="color: var(--accent-cyan); cursor: pointer; text-decoration: none;"
-          >
-            Get key
-          </a>
+        <!-- API Key (only show when API is selected) -->
+        <div v-if="aiProvider === 'api'">
+          <div class="flex items-center gap-2">
+            <input
+              v-model="settingsStore.anthropicApiKey"
+              :type="hasKey ? 'password' : 'text'"
+              :placeholder="hasKey ? '' : 'sk-ant-...'"
+              class="flex-1 px-3 py-2 transition-all duration-150"
+              style="
+                background: var(--bg-primary);
+                border: 1px solid var(--border-default);
+                color: var(--text-primary);
+                font-family: var(--font-mono);
+                font-size: 0.7rem;
+              "
+            />
+            <button
+              v-if="hasKey"
+              @click="settingsStore.setAnthropicApiKey('')"
+              class="btn-icon btn-icon-danger"
+              title="Remove key"
+            >
+              <XMarkIcon class="w-3.5 h-3.5" />
+            </button>
+          </div>
+
+          <div class="flex items-center justify-between mt-2">
+            <span style="font-size: 0.6rem; color: var(--text-muted);">Stored locally.</span>
+            <a
+              href="https://console.anthropic.com/settings/keys"
+              target="_blank"
+              class="text-label transition-colors"
+              style="color: var(--accent-cyan); cursor: pointer; text-decoration: none;"
+            >
+              Get key
+            </a>
+          </div>
+        </div>
+
+        <!-- Info text for CLI options -->
+        <div v-if="aiProvider === 'claude' || aiProvider === 'codex'" class="mt-2">
+          <span style="font-size: 0.6rem; color: var(--text-muted);">
+            Uses your existing {{ aiProvider === 'claude' ? 'Claude Max' : 'OpenAI' }} subscription.
+          </span>
+        </div>
+
+        <!-- No CLIs detected message -->
+        <div v-if="availableAiClis.length === 0" class="mt-3 px-3 py-2" style="background: var(--bg-tertiary); border: 1px solid var(--border-subtle);">
+          <span style="font-size: 0.6rem; color: var(--text-muted);">
+            No AI CLIs detected. Install <a href="https://claude.ai/code" target="_blank" style="color: var(--accent-cyan);">Claude Code</a> for free commit messages with your Max subscription.
+          </span>
         </div>
       </div>
     </div>

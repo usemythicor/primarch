@@ -62,18 +62,43 @@ onUnmounted(() => {
 });
 
 const isGenerating = ref(false);
-const canGenerate = computed(
-  () => settingsStore.anthropicApiKey && gitStore.stagedFiles.length > 0 && !isGenerating.value
-);
+const aiProvider = computed(() => settingsStore.aiProvider);
+
+const canGenerate = computed(() => {
+  if (gitStore.stagedFiles.length === 0 || isGenerating.value) return false;
+  if (aiProvider.value === 'none') return false;
+  if (aiProvider.value === 'api') return !!settingsStore.anthropicApiKey;
+  // CLI providers (claude, codex) are always available if selected
+  return true;
+});
+
+const generateButtonTitle = computed(() => {
+  if (aiProvider.value === 'none') return 'Enable AI in Settings';
+  if (aiProvider.value === 'api' && !settingsStore.anthropicApiKey) return 'Set Anthropic API key in Settings';
+  if (gitStore.stagedFiles.length === 0) return 'Stage files first';
+  return 'Generate commit message with AI';
+});
 
 async function generateCommitMessage() {
   if (!canGenerate.value || !gitStore.repoId) return;
   isGenerating.value = true;
   try {
-    const message = await invoke<string>('generate_commit_message', {
-      repoId: gitStore.repoId,
-      apiKey: settingsStore.anthropicApiKey,
-    });
+    let message: string;
+
+    if (aiProvider.value === 'api') {
+      // Use Anthropic API
+      message = await invoke<string>('generate_commit_message', {
+        repoId: gitStore.repoId,
+        apiKey: settingsStore.anthropicApiKey,
+      });
+    } else {
+      // Use CLI (claude or codex)
+      message = await invoke<string>('generate_commit_message_cli', {
+        repoId: gitStore.repoId,
+        cli: aiProvider.value,
+      });
+    }
+
     gitStore.commitMessage = message;
   } catch (e) {
     gitStore.commitMessage = `Error: ${e}`;
@@ -124,7 +149,7 @@ function handleKeydown(e: KeyboardEvent) {
         :disabled="!canGenerate"
         class="generate-btn flex items-center gap-1 px-1.5 py-0.5"
         :class="{ 'disabled': !canGenerate, 'loading': isGenerating }"
-        :title="settingsStore.anthropicApiKey ? 'Generate commit message with AI' : 'Set Anthropic API key in Settings'"
+        :title="generateButtonTitle"
       >
         <SparklesIcon class="w-3 h-3" :class="{ 'animate-pulse': isGenerating }" />
         <span class="text-label" style="letter-spacing: 0.05em;">{{ isGenerating ? 'GENERATING...' : 'AI' }}</span>

@@ -1,9 +1,12 @@
 import { defineStore } from 'pinia';
 import { ref, computed, watch } from 'vue';
+import { invoke } from '@tauri-apps/api/core';
 import type { Theme } from '../types';
 import { themes, getThemeById, getDefaultTheme } from '../themes/presets';
 
 const STORAGE_KEY = 'primarch-settings';
+
+export type AiProvider = 'none' | 'api' | 'claude' | 'codex';
 
 interface Settings {
   themeId: string;
@@ -13,6 +16,7 @@ interface Settings {
   cursorStyle: 'block' | 'underline' | 'bar';
   accentColor: string;
   anthropicApiKey: string;
+  aiProvider: AiProvider;
 }
 
 export interface AccentPreset {
@@ -41,6 +45,7 @@ const defaultSettings: Settings = {
   cursorStyle: 'block',
   accentColor: 'cyan',
   anthropicApiKey: '',
+  aiProvider: 'none',
 };
 
 export const useSettingsStore = defineStore('settings', () => {
@@ -55,6 +60,8 @@ export const useSettingsStore = defineStore('settings', () => {
   const cursorStyle = ref(savedSettings.cursorStyle);
   const accentColor = ref(savedSettings.accentColor);
   const anthropicApiKey = ref(savedSettings.anthropicApiKey);
+  const aiProvider = ref<AiProvider>(savedSettings.aiProvider);
+  const availableAiClis = ref<string[]>([]);
 
   // Apply accent color to CSS variables
   function applyAccentColor(id: string) {
@@ -175,6 +182,21 @@ export const useSettingsStore = defineStore('settings', () => {
     anthropicApiKey.value = key;
   }
 
+  function setAiProvider(provider: AiProvider) {
+    aiProvider.value = provider;
+  }
+
+  async function detectAiClis() {
+    try {
+      availableAiClis.value = await invoke<string[]>('detect_ai_clis');
+    } catch {
+      availableAiClis.value = [];
+    }
+  }
+
+  // Detect available CLIs on init
+  detectAiClis();
+
   function setAccentColor(id: string) {
     if (accentPresets.find((p) => p.id === id)) {
       accentColor.value = id;
@@ -192,11 +214,12 @@ export const useSettingsStore = defineStore('settings', () => {
     applyAccentColor(defaultSettings.accentColor);
     applyColorMode(false); // Default theme (Dracula) is dark
     anthropicApiKey.value = defaultSettings.anthropicApiKey;
+    aiProvider.value = defaultSettings.aiProvider;
   }
 
   // Auto-save settings
   watch(
-    [themeId, fontSize, fontFamily, cursorBlink, cursorStyle, accentColor, anthropicApiKey],
+    [themeId, fontSize, fontFamily, cursorBlink, cursorStyle, accentColor, anthropicApiKey, aiProvider],
     () => {
       saveSettings({
         themeId: themeId.value,
@@ -206,6 +229,7 @@ export const useSettingsStore = defineStore('settings', () => {
         cursorStyle: cursorStyle.value,
         accentColor: accentColor.value,
         anthropicApiKey: anthropicApiKey.value,
+        aiProvider: aiProvider.value,
       });
     },
     { deep: true }
@@ -220,6 +244,8 @@ export const useSettingsStore = defineStore('settings', () => {
     cursorStyle,
     accentColor,
     anthropicApiKey,
+    aiProvider,
+    availableAiClis,
 
     // Computed
     currentTheme,
@@ -235,6 +261,8 @@ export const useSettingsStore = defineStore('settings', () => {
     setCursorStyle,
     setAccentColor,
     setAnthropicApiKey,
+    setAiProvider,
+    detectAiClis,
     resetToDefaults,
   };
 });

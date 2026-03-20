@@ -554,7 +554,8 @@ async fn generate_commit_message(
     repo_id: String,
     api_key: String,
 ) -> Result<String, String> {
-    let diff_text = state.read().git_manager.get_staged_diff_text(&repo_id)?;
+    // Use compact diff for API to minimize token usage (and cost)
+    let diff_text = state.read().git_manager.get_staged_diff_compact(&repo_id)?;
 
     let client = reqwest::Client::new();
     let response = client
@@ -600,6 +601,135 @@ async fn generate_commit_message(
         .as_str()
         .map(|s| s.trim().to_string())
         .ok_or_else(|| "No content in API response".to_string())
+}
+
+/// Check if a CLI tool is available (Windows-compatible)
+fn is_cli_available(name: &str) -> bool {
+    #[cfg(windows)]
+    {
+        std::process::Command::new("cmd")
+            .args(["/C", name, "--version"])
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .status()
+            .map(|s| s.success())
+            .unwrap_or(false)
+    }
+    #[cfg(not(windows))]
+    {
+        std::process::Command::new(name)
+            .arg("--version")
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .status()
+            .map(|s| s.success())
+            .unwrap_or(false)
+    }
+}
+
+/// Detect available AI CLI tools
+#[tauri::command]
+fn detect_ai_clis() -> Vec<String> {
+    let mut available = Vec::new();
+
+    if is_cli_available("claude") {
+        available.push("claude".to_string());
+    }
+
+    if is_cli_available("codex") {
+        available.push("codex".to_string());
+    }
+
+    available
+}
+
+/// Generate a commit message using an AI CLI tool (claude, codex, etc.)
+#[tauri::command]
+async fn generate_commit_message_cli(
+    state: State<'_, Arc<RwLock<AppState>>>,
+    repo_id: String,
+    cli: String,
+) -> Result<String, String> {
+    let diff_text = state.read().git_manager.get_staged_diff_text(&repo_id)?;
+
+    if diff_text.trim().is_empty() {
+        return Err("No staged changes to generate commit message from".to_string());
+    }
+
+    let prompt = format!(
+        "Generate a concise git commit message for the following staged diff. \
+         Use conventional commit format (e.g., feat:, fix:, refactor:). \
+         First line should be under 72 characters. Add a blank line and brief \
+         body only if the changes are complex. Do not include any explanation \
+         outside the commit message itself. Do not wrap the message in backticks \
+         or any markdown formatting - output only the raw commit message text.\n\n\
+         Diff:\n{}\n",
+        diff_text
+    );
+
+    let output = match cli.as_str() {
+        "claude" | "codex" => {
+            use std::process::{Command, Stdio};
+
+            // Write prompt to a temp file to avoid command line length/escaping issues
+            let temp_dir = std::env::temp_dir();
+            let temp_file = temp_dir.join(format!("primarch_prompt_{}.txt", std::process::id()));
+
+            std::fs::write(&temp_file, &prompt)
+                .map_err(|e| format!("Failed to write prompt to temp file: {}", e))?;
+
+            // Run from temp directory to avoid CLI picking up local git context
+            // --tools '' disables tool access so it only uses our prompt
+            #[cfg(windows)]
+            let result = {
+                let ps_command = format!(
+                    "Set-Location '{}'; Get-Content -Raw '{}' | {} --tools '' -p -",
+                    temp_dir.to_string_lossy().replace("'", "''"),
+                    temp_file.to_string_lossy().replace("'", "''"),
+                    cli
+                );
+                Command::new("powershell")
+                    .args(["-NoProfile", "-Command", &ps_command])
+                    .stdout(Stdio::piped())
+                    .stderr(Stdio::piped())
+                    .output()
+            };
+
+            #[cfg(not(windows))]
+            let result = {
+                let shell_command = format!(
+                    "cd '{}' && cat '{}' | {} --tools '' -p -",
+                    temp_dir.to_string_lossy().replace("'", "'\\''"),
+                    temp_file.to_string_lossy().replace("'", "'\\''"),
+                    cli
+                );
+                Command::new("sh")
+                    .args(["-c", &shell_command])
+                    .stdout(Stdio::piped())
+                    .stderr(Stdio::piped())
+                    .output()
+            };
+
+            // Clean up temp file
+            let _ = std::fs::remove_file(&temp_file);
+
+            result.map_err(|e| format!("Failed to run {} CLI: {}", cli, e))?
+        }
+        _ => return Err(format!("Unknown CLI: {}", cli)),
+    };
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(format!("CLI error: {}", stderr));
+    }
+
+    let message = String::from_utf8_lossy(&output.stdout).trim().to_string();
+
+    if message.is_empty() {
+        return Err("CLI returned empty response".to_string());
+    }
+
+    Ok(message)
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -664,6 +794,8 @@ pub fn run() {
             save_clipboard_image,
             // AI commands
             generate_commit_message,
+            generate_commit_message_cli,
+            detect_ai_clis,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

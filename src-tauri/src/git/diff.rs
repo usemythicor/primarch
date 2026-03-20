@@ -236,6 +236,15 @@ pub fn get_commit_file_diff(
 /// Get full diff stats for repository
 /// Get the full staged diff as a unified diff string (for AI commit message generation)
 pub fn get_staged_diff_text(repo: &Repository) -> Result<String, String> {
+    get_staged_diff_text_internal(repo, false)
+}
+
+/// Get a compact staged diff (only +/- lines, no context) for token-efficient API usage
+pub fn get_staged_diff_compact(repo: &Repository) -> Result<String, String> {
+    get_staged_diff_text_internal(repo, true)
+}
+
+fn get_staged_diff_text_internal(repo: &Repository, compact: bool) -> Result<String, String> {
     let head_tree = repo.head().ok().and_then(|h| h.peel_to_tree().ok());
 
     let diff = repo
@@ -243,27 +252,57 @@ pub fn get_staged_diff_text(repo: &Repository) -> Result<String, String> {
         .map_err(|e| format!("Failed to get staged diff: {}", e))?;
 
     let mut output = String::new();
-    diff.print(git2::DiffFormat::Patch, |_delta, _hunk, line| {
-        let prefix = match line.origin() {
-            '+' => "+",
-            '-' => "-",
-            ' ' => " ",
-            'H' => "",
-            'F' => "",
-            _ => "",
-        };
-        // Stop collecting if we've hit the size limit
-        if output.len() < 20_000 {
-            output.push_str(prefix);
-            if let Ok(content) = std::str::from_utf8(line.content()) {
-                output.push_str(content);
+    let mut current_file: Option<String> = None;
+
+    diff.print(git2::DiffFormat::Patch, |delta, _hunk, line| {
+        // In compact mode, track file changes and only include +/- lines
+        if compact {
+            // Check if we've moved to a new file
+            if let Some(new_path) = delta.new_file().path() {
+                let new_file = new_path.to_string_lossy().to_string();
+                if current_file.as_ref() != Some(&new_file) {
+                    current_file = Some(new_file.clone());
+                    if output.len() < 10_000 {
+                        output.push_str(&format!("\n--- {}\n", new_file));
+                    }
+                }
+            }
+
+            // Only include actual changes, not context
+            match line.origin() {
+                '+' | '-' => {
+                    if output.len() < 10_000 {
+                        output.push(line.origin());
+                        if let Ok(content) = std::str::from_utf8(line.content()) {
+                            output.push_str(content);
+                        }
+                    }
+                }
+                _ => {} // Skip context lines, headers, etc.
+            }
+        } else {
+            // Full diff mode - include everything
+            let prefix = match line.origin() {
+                '+' => "+",
+                '-' => "-",
+                ' ' => " ",
+                'H' => "",
+                'F' => "",
+                _ => "",
+            };
+            if output.len() < 20_000 {
+                output.push_str(prefix);
+                if let Ok(content) = std::str::from_utf8(line.content()) {
+                    output.push_str(content);
+                }
             }
         }
         true
     })
     .map_err(|e| format!("Failed to print diff: {}", e))?;
 
-    if output.len() >= 20_000 {
+    let limit = if compact { 10_000 } else { 20_000 };
+    if output.len() >= limit {
         output.push_str("\n... (diff truncated)\n");
     }
 
