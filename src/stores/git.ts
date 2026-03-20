@@ -90,8 +90,14 @@ export const useGitStore = defineStore('git', () => {
     isFetching.value || isPulling.value || isPushing.value
   );
 
+  const hasUpstream = computed(() => status.value?.upstream !== null);
+
+  const needsPublish = computed(() =>
+    hasRepo.value && branchName.value !== null && !hasUpstream.value
+  );
+
   const canPush = computed(() =>
-    hasRepo.value && ahead.value > 0 && !isRemoteOperating.value
+    hasRepo.value && (ahead.value > 0 || needsPublish.value) && !isRemoteOperating.value
   );
 
   const canPull = computed(() =>
@@ -335,7 +341,7 @@ export const useGitStore = defineStore('git', () => {
     }
   }
 
-  async function push() {
+  async function push(setUpstream: boolean = false) {
     if (!repoId.value || isPushing.value) return;
 
     isPushing.value = true;
@@ -343,14 +349,18 @@ export const useGitStore = defineStore('git', () => {
     remoteMessage.value = null;
 
     try {
-      await invoke('git_push', { repoId: repoId.value });
-      remoteMessage.value = 'Push complete';
+      await invoke('git_push', { repoId: repoId.value, setUpstream });
+      remoteMessage.value = setUpstream ? 'Branch published' : 'Push complete';
       await refreshStatus();
     } catch (e) {
       error.value = `Push failed: ${e}`;
     } finally {
       isPushing.value = false;
     }
+  }
+
+  async function publish() {
+    await push(true);
   }
 
   async function sync() {
@@ -664,6 +674,8 @@ export const useGitStore = defineStore('git', () => {
     canCommit,
     changeCount,
     isRemoteOperating,
+    hasUpstream,
+    needsPublish,
     canPush,
     canPull,
 
@@ -685,6 +697,7 @@ export const useGitStore = defineStore('git', () => {
     fetch,
     pull,
     push,
+    publish,
     sync,
     clearRemoteMessage,
     loadHistory,

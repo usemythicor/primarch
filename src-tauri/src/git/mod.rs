@@ -196,9 +196,9 @@ impl GitManager {
     }
 
     /// Push to remote
-    pub fn push(&self, id: &str, remote: &str) -> Result<(), String> {
+    pub fn push(&self, id: &str, remote: &str, set_upstream: bool) -> Result<(), String> {
         let repo = self.open_repo(id)?;
-        repository::push(&repo, remote)
+        repository::push(&repo, remote, set_upstream)
     }
 
     /// List remotes

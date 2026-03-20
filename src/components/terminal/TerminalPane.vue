@@ -5,6 +5,7 @@ import { FitAddon } from '@xterm/addon-fit';
 import { WebLinksAddon } from '@xterm/addon-web-links';
 import { invoke } from '@tauri-apps/api/core';
 import { readText, readImage, writeText } from '@tauri-apps/plugin-clipboard-manager';
+import { openUrl } from '@tauri-apps/plugin-opener';
 import { useTerminal } from '../../composables/useTerminal';
 import { useSettingsStore } from '../../stores/settings';
 import { useLayoutStore } from '../../stores/layout';
@@ -121,7 +122,12 @@ onMounted(async () => {
   // Add addons
   fitAddon = new FitAddon();
   terminal.loadAddon(fitAddon);
-  terminal.loadAddon(new WebLinksAddon());
+  terminal.loadAddon(new WebLinksAddon((_event, uri) => {
+    // Open links in default browser using Tauri's opener plugin
+    openUrl(uri).catch((err) => {
+      console.error('Failed to open URL:', err);
+    });
+  }));
 
   // Mount to DOM
   terminal.open(terminalRef.value);

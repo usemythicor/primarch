@@ -362,9 +362,11 @@ fn git_push(
     state: State<'_, Arc<RwLock<AppState>>>,
     repo_id: String,
     remote: Option<String>,
+    set_upstream: Option<bool>,
 ) -> Result<(), String> {
     let remote = remote.unwrap_or_else(|| "origin".to_string());
-    state.read().git_manager.push(&repo_id, &remote)
+    let set_upstream = set_upstream.unwrap_or(false);
+    state.read().git_manager.push(&repo_id, &remote, set_upstream)
 }
 
 /// List remotes

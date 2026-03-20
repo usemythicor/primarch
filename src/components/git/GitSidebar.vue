@@ -40,6 +40,7 @@ const isDiscarding = computed(() => gitStore.isDiscarding);
 const ahead = computed(() => gitStore.ahead);
 const behind = computed(() => gitStore.behind);
 const isRemoteOperating = computed(() => gitStore.isRemoteOperating);
+const needsPublish = computed(() => gitStore.needsPublish);
 
 const showActionsMenu = ref(false);
 
@@ -58,7 +59,11 @@ async function handlePull() {
 
 async function handlePush() {
   closeActionsMenu();
-  await gitStore.push();
+  if (needsPublish.value) {
+    await gitStore.publish();
+  } else {
+    await gitStore.push();
+  }
 }
 
 async function handleSync() {
@@ -171,9 +176,9 @@ function hideBranchSelector() {
                 :disabled="isRemoteOperating"
                 class="git-menu-item w-full flex items-center gap-3 px-3 py-2 text-left transition-colors"
               >
-                <CloudArrowUpIcon class="w-4 h-4 flex-shrink-0" :style="{ color: ahead > 0 ? 'var(--accent-green)' : 'var(--text-muted)' }" />
-                <span class="text-label flex-1" style="color: var(--text-secondary);">Push</span>
-                <span v-if="ahead > 0" class="text-label" style="color: var(--accent-green);">{{ ahead }}</span>
+                <CloudArrowUpIcon class="w-4 h-4 flex-shrink-0" :style="{ color: (ahead > 0 || needsPublish) ? 'var(--accent-green)' : 'var(--text-muted)' }" />
+                <span class="text-label flex-1" style="color: var(--text-secondary);">{{ needsPublish ? 'Publish Branch' : 'Push' }}</span>
+                <span v-if="ahead > 0 && !needsPublish" class="text-label" style="color: var(--accent-green);">{{ ahead }}</span>
               </button>
               <div class="my-1" style="border-top: 1px solid var(--border-subtle);"></div>
               <button

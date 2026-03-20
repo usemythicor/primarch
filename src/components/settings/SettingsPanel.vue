@@ -1,11 +1,13 @@
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, ref } from 'vue';
 import {
   XMarkIcon,
   SwatchIcon,
   ArrowPathIcon,
   CursorArrowRaysIcon,
   SparklesIcon,
+  PaintBrushIcon,
+  ChevronRightIcon,
 } from '@heroicons/vue/24/outline';
 import { useSettingsStore, accentPresets } from '../../stores/settings';
 
@@ -16,16 +18,21 @@ const emit = defineEmits<{
 const settingsStore = useSettingsStore();
 
 const themes = computed(() => settingsStore.availableThemes);
+const darkThemes = computed(() => themes.value.filter(t => !t.light));
+const lightThemes = computed(() => themes.value.filter(t => t.light));
 const currentThemeId = computed(() => settingsStore.themeId);
+const currentTheme = computed(() => settingsStore.currentTheme);
 const fontSize = computed(() => settingsStore.fontSize);
 const cursorStyle = computed(() => settingsStore.cursorStyle);
 const cursorBlink = computed(() => settingsStore.cursorBlink);
 const currentAccent = computed(() => settingsStore.accentColor);
 
 const hasKey = computed(() => !!settingsStore.anthropicApiKey);
+const showThemePicker = ref(false);
 
 function selectTheme(id: string) {
   settingsStore.setTheme(id);
+  showThemePicker.value = false;
 }
 
 function changeFontSize(delta: number) {
@@ -73,34 +80,120 @@ function resetSettings() {
     <div class="flex-1 overflow-y-auto p-5 space-y-6">
       <!-- Theme Selection -->
       <div>
-        <div class="flex items-center gap-2 mb-4">
+        <div class="flex items-center gap-2 mb-3">
           <SwatchIcon class="w-4 h-4" style="color: var(--accent-cyan);" />
           <span class="text-header">THEME</span>
         </div>
-        <div class="grid grid-cols-2 gap-2">
-          <button
-            v-for="theme in themes"
-            :key="theme.id"
-            @click="selectTheme(theme.id)"
-            class="flex items-center gap-3 px-3 py-2.5 transition-all duration-150 text-left"
-            :style="{
-              background: currentThemeId === theme.id ? 'rgba(var(--accent-rgb), 0.08)' : 'var(--bg-tertiary)',
-              border: currentThemeId === theme.id ? '1px solid var(--accent-cyan)' : '1px solid var(--border-subtle)',
-              boxShadow: currentThemeId === theme.id ? '0 0 20px rgba(var(--accent-rgb), 0.1)' : 'none',
-            }"
-          >
+
+        <!-- Current theme display with picker button -->
+        <button
+          @click="showThemePicker = !showThemePicker"
+          class="w-full flex items-center justify-between px-3 py-2.5 transition-all duration-150"
+          :style="{
+            background: 'var(--bg-tertiary)',
+            border: showThemePicker ? '1px solid var(--accent-cyan)' : '1px solid var(--border-subtle)',
+          }"
+        >
+          <div class="flex items-center gap-3">
             <div
-              class="w-3 h-3 rounded-sm"
-              :style="{ backgroundColor: theme.background, border: '1px solid var(--border-strong)' }"
+              class="w-4 h-4 rounded-sm"
+              :style="{ backgroundColor: currentTheme.background, border: '1px solid var(--border-strong)' }"
             ></div>
-            <span
-              class="text-label"
-              :style="{ color: currentThemeId === theme.id ? 'var(--accent-cyan)' : 'var(--text-secondary)' }"
-            >
-              {{ theme.name }}
+            <span class="text-label" style="color: var(--text-secondary);">
+              {{ currentTheme.name }}
             </span>
-          </button>
-        </div>
+            <span
+              v-if="currentTheme.light"
+              class="text-label px-1.5 py-0.5"
+              style="background: var(--bg-hover); color: var(--text-muted); font-size: 0.55rem;"
+            >
+              LIGHT
+            </span>
+          </div>
+          <div class="flex items-center gap-2">
+            <PaintBrushIcon class="w-4 h-4" style="color: var(--text-muted);" />
+            <ChevronRightIcon
+              class="w-3 h-3 transition-transform duration-150"
+              :style="{ color: 'var(--text-muted)', transform: showThemePicker ? 'rotate(90deg)' : 'rotate(0)' }"
+            />
+          </div>
+        </button>
+
+        <!-- Theme picker dropdown -->
+        <Transition
+          enter-active-class="transition-all duration-150 ease-out"
+          enter-from-class="opacity-0 max-h-0"
+          enter-to-class="opacity-100 max-h-[400px]"
+          leave-active-class="transition-all duration-100 ease-in"
+          leave-from-class="opacity-100 max-h-[400px]"
+          leave-to-class="opacity-0 max-h-0"
+        >
+          <div
+            v-if="showThemePicker"
+            class="mt-2 overflow-hidden"
+            style="border: 1px solid var(--border-subtle);"
+          >
+            <div class="max-h-[300px] overflow-y-auto">
+              <!-- Dark themes -->
+              <div class="px-3 py-2" style="background: var(--bg-primary); border-bottom: 1px solid var(--border-subtle);">
+                <span class="text-label" style="color: var(--text-muted);">DARK</span>
+              </div>
+              <div class="grid grid-cols-2">
+                <button
+                  v-for="theme in darkThemes"
+                  :key="theme.id"
+                  @click="selectTheme(theme.id)"
+                  class="flex items-center gap-2 px-3 py-2 transition-all duration-150 text-left"
+                  :style="{
+                    background: currentThemeId === theme.id ? 'rgba(var(--accent-rgb), 0.08)' : 'transparent',
+                    borderRight: '1px solid var(--border-subtle)',
+                    borderBottom: '1px solid var(--border-subtle)',
+                  }"
+                >
+                  <div
+                    class="w-3 h-3 rounded-sm flex-shrink-0"
+                    :style="{ backgroundColor: theme.background, border: '1px solid var(--border-strong)' }"
+                  ></div>
+                  <span
+                    class="text-label truncate"
+                    :style="{ color: currentThemeId === theme.id ? 'var(--accent-cyan)' : 'var(--text-secondary)' }"
+                  >
+                    {{ theme.name }}
+                  </span>
+                </button>
+              </div>
+
+              <!-- Light themes -->
+              <div class="px-3 py-2" style="background: var(--bg-primary); border-bottom: 1px solid var(--border-subtle);">
+                <span class="text-label" style="color: var(--text-muted);">LIGHT</span>
+              </div>
+              <div class="grid grid-cols-2">
+                <button
+                  v-for="theme in lightThemes"
+                  :key="theme.id"
+                  @click="selectTheme(theme.id)"
+                  class="flex items-center gap-2 px-3 py-2 transition-all duration-150 text-left"
+                  :style="{
+                    background: currentThemeId === theme.id ? 'rgba(var(--accent-rgb), 0.08)' : 'transparent',
+                    borderRight: '1px solid var(--border-subtle)',
+                    borderBottom: '1px solid var(--border-subtle)',
+                  }"
+                >
+                  <div
+                    class="w-3 h-3 rounded-sm flex-shrink-0"
+                    :style="{ backgroundColor: theme.background, border: '1px solid var(--border-strong)' }"
+                  ></div>
+                  <span
+                    class="text-label truncate"
+                    :style="{ color: currentThemeId === theme.id ? 'var(--accent-cyan)' : 'var(--text-secondary)' }"
+                  >
+                    {{ theme.name }}
+                  </span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </Transition>
       </div>
 
       <!-- Accent Color -->

@@ -574,7 +574,7 @@ pub fn pull(repo: &Repository, remote_name: &str) -> Result<String, String> {
 }
 
 /// Push to remote
-pub fn push(repo: &Repository, remote_name: &str) -> Result<(), String> {
+pub fn push(repo: &Repository, remote_name: &str, set_upstream: bool) -> Result<(), String> {
     let head = repo
         .head()
         .map_err(|e| format!("Failed to get HEAD: {}", e))?;
@@ -598,6 +598,18 @@ pub fn push(repo: &Repository, remote_name: &str) -> Result<(), String> {
     remote
         .push(&[&refspec], Some(&mut push_opts))
         .map_err(|e| format!("Push failed: {}", e))?;
+
+    // Set upstream tracking if requested
+    if set_upstream {
+        let mut branch = repo
+            .find_branch(branch_name, BranchType::Local)
+            .map_err(|e| format!("Failed to find branch: {}", e))?;
+
+        let upstream_name = format!("{}/{}", remote_name, branch_name);
+        branch
+            .set_upstream(Some(&upstream_name))
+            .map_err(|e| format!("Failed to set upstream: {}", e))?;
+    }
 
     Ok(())
 }

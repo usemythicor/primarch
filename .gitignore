@@ -22,3 +22,7 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Windows reserved names (can be created by some tools/AI)
+nul
+NUL
