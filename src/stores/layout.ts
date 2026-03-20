@@ -39,7 +39,9 @@ export const useLayoutStore = defineStore('layout', () => {
     // If no cwd provided, try to get it from the active terminal
     let finalOptions = options || {};
     if (!finalOptions.cwd && target) {
+      const existingNode = findNode(rootLayout.value, target);
       const sessionId = sessionRegistry.value.get(target);
+
       if (sessionId) {
         try {
           const cwd = await invoke<string>('get_terminal_cwd', { sessionId });
@@ -47,8 +49,14 @@ export const useLayoutStore = defineStore('layout', () => {
             finalOptions = { ...finalOptions, cwd };
           }
         } catch {
-          // CWD not available - use default
+          // CWD not available from PTY tracking - fall back to node's stored cwd
+          if (existingNode?.type === 'terminal' && existingNode.cwd) {
+            finalOptions = { ...finalOptions, cwd: existingNode.cwd };
+          }
         }
+      } else if (existingNode?.type === 'terminal' && existingNode.cwd) {
+        // No session yet - use node's existing cwd
+        finalOptions = { ...finalOptions, cwd: existingNode.cwd };
       }
     }
 

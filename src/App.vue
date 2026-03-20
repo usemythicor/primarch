@@ -7,6 +7,7 @@ import {
   CommandLineIcon,
   CodeBracketIcon,
   ArrowPathRoundedSquareIcon,
+  CloudArrowUpIcon,
   MinusIcon,
   StopIcon,
   XMarkIcon,
@@ -403,7 +404,10 @@ onUnmounted(() => {
             <span class="text-label" style="color: var(--text-secondary);">{{ gitBranchName || 'No branch' }}</span>
             <span v-if="gitAhead > 0 || gitBehind > 0" class="flex items-center gap-1">
               <span v-if="gitBehind > 0" class="text-label" style="color: var(--accent-orange);">{{ gitBehind }}↓</span>
-              <span v-if="gitAhead > 0" class="text-label" style="color: var(--accent-green);">{{ gitAhead }}↑</span>
+              <span v-if="gitAhead > 0" class="flex items-center gap-0.5" style="color: var(--accent-green);">
+                <CloudArrowUpIcon class="w-3 h-3" />
+                <span class="text-label">{{ gitAhead }}</span>
+              </span>
             </span>
             <span
               v-if="gitChangeCount > 0"

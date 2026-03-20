@@ -70,6 +70,7 @@ function handleFocus() {
     @focusin="handleFocus"
   >
     <TerminalPane
+      :key="node.id"
       :node-id="node.id"
       :shell="node.shell"
       :cwd="node.cwd"
