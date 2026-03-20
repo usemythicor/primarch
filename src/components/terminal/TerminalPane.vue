@@ -4,6 +4,7 @@ import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import { WebLinksAddon } from '@xterm/addon-web-links';
 import { invoke } from '@tauri-apps/api/core';
+import { readText, readImage, writeText } from '@tauri-apps/plugin-clipboard-manager';
 import { useTerminal } from '../../composables/useTerminal';
 import { useSettingsStore } from '../../stores/settings';
 import { useLayoutStore } from '../../stores/layout';
@@ -34,6 +35,53 @@ let fitAddon: FitAddon | null = null;
 const { createSession, startReading, write, resize, kill } = useTerminal();
 
 const bgColor = computed(() => settingsStore.currentTheme.background);
+
+// Handle clipboard paste
+async function handlePaste() {
+  if (!sessionId.value) return;
+
+  try {
+    // Try to read text first
+    const text = await readText();
+    if (text) {
+      await write(sessionId.value, text);
+      return;
+    }
+  } catch {
+    // No text in clipboard, try image
+  }
+
+  try {
+    // Try to read image from clipboard
+    const image = await readImage();
+    if (image) {
+      const size = await image.size();
+      const rgbaData = await image.rgba();
+
+      // Save image to temp file and get the path
+      const filePath = await invoke<string>('save_clipboard_image', {
+        rgbaData: Array.from(rgbaData),
+        width: size.width,
+        height: size.height,
+      });
+
+      // Paste the file path (with quotes in case of spaces)
+      await write(sessionId.value, `"${filePath}"`);
+    }
+  } catch (e) {
+    // No image or failed to save, ignore
+    console.error('Failed to paste image:', e);
+  }
+}
+
+// Handle clipboard copy
+async function handleCopy(text: string) {
+  try {
+    await writeText(text);
+  } catch (e) {
+    console.error('Failed to copy to clipboard:', e);
+  }
+}
 
 // Watch for theme/settings changes
 watch(
@@ -147,6 +195,25 @@ onMounted(async () => {
     // Handle title changes
     terminal.onTitleChange((title) => {
       emit('title-change', title);
+    });
+
+    // Handle clipboard paste (Ctrl+V or Ctrl+Shift+V)
+    terminal.attachCustomKeyEventHandler((event) => {
+      // Handle paste
+      if (event.type === 'keydown' && event.ctrlKey && (event.key === 'v' || event.key === 'V')) {
+        handlePaste();
+        return false; // Prevent default
+      }
+      // Handle copy (Ctrl+C with selection)
+      if (event.type === 'keydown' && event.ctrlKey && (event.key === 'c' || event.key === 'C')) {
+        const selection = terminal?.getSelection();
+        if (selection) {
+          handleCopy(selection);
+          return false; // Prevent default (don't send SIGINT)
+        }
+        // No selection, let Ctrl+C pass through as SIGINT
+      }
+      return true; // Let other keys pass through
     });
 
     // Run startup command if provided

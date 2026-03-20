@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue';
+import { ref, computed, onMounted, onUnmounted } from 'vue';
 import { invoke } from '@tauri-apps/api/core';
 import { CheckIcon, SparklesIcon } from '@heroicons/vue/24/outline';
 import { useGitStore } from '../../stores/git';
@@ -7,6 +7,59 @@ import { useSettingsStore } from '../../stores/settings';
 
 const gitStore = useGitStore();
 const settingsStore = useSettingsStore();
+
+// Resizable panel logic
+const STORAGE_KEY = 'mythicor-commit-panel-height';
+const MIN_HEIGHT = 100;
+const MAX_HEIGHT = 400;
+const DEFAULT_HEIGHT = 140;
+
+const panelHeight = ref(DEFAULT_HEIGHT);
+const isResizing = ref(false);
+const startY = ref(0);
+const startHeight = ref(0);
+
+onMounted(() => {
+  const saved = localStorage.getItem(STORAGE_KEY);
+  if (saved) {
+    const parsed = parseInt(saved, 10);
+    if (!isNaN(parsed) && parsed >= MIN_HEIGHT && parsed <= MAX_HEIGHT) {
+      panelHeight.value = parsed;
+    }
+  }
+});
+
+function startResize(e: MouseEvent) {
+  isResizing.value = true;
+  startY.value = e.clientY;
+  startHeight.value = panelHeight.value;
+  document.addEventListener('mousemove', onResize);
+  document.addEventListener('mouseup', stopResize);
+  document.body.style.cursor = 'ns-resize';
+  document.body.style.userSelect = 'none';
+}
+
+function onResize(e: MouseEvent) {
+  if (!isResizing.value) return;
+  const delta = startY.value - e.clientY;
+  const newHeight = Math.min(MAX_HEIGHT, Math.max(MIN_HEIGHT, startHeight.value + delta));
+  panelHeight.value = newHeight;
+}
+
+function stopResize() {
+  if (!isResizing.value) return;
+  isResizing.value = false;
+  document.removeEventListener('mousemove', onResize);
+  document.removeEventListener('mouseup', stopResize);
+  document.body.style.cursor = '';
+  document.body.style.userSelect = '';
+  localStorage.setItem(STORAGE_KEY, panelHeight.value.toString());
+}
+
+onUnmounted(() => {
+  document.removeEventListener('mousemove', onResize);
+  document.removeEventListener('mouseup', stopResize);
+});
 
 const isGenerating = ref(false);
 const canGenerate = computed(
@@ -56,8 +109,13 @@ function handleKeydown(e: KeyboardEvent) {
 <template>
   <div
     class="commit-panel px-3 py-3"
-    style="border-top: 1px solid var(--border-subtle); background: var(--bg-tertiary);"
+    :style="{ height: panelHeight + 'px', background: 'var(--bg-tertiary)' }"
   >
+    <!-- Resize handle -->
+    <div
+      class="resize-handle"
+      @mousedown.prevent="startResize"
+    ></div>
     <!-- Header with AI generate -->
     <div class="flex items-center justify-between mb-1">
       <span class="text-label" style="color: var(--text-muted);">Message</span>
@@ -78,8 +136,7 @@ function handleKeydown(e: KeyboardEvent) {
       v-model="commitMessage"
       @keydown="handleKeydown"
       placeholder="Commit message (Ctrl+Enter to commit)"
-      class="commit-input w-full px-2 py-1.5 resize-none"
-      rows="3"
+      class="commit-input w-full px-2 py-1.5 resize-none flex-1"
       :disabled="isCommitting"
     ></textarea>
 
@@ -102,6 +159,30 @@ function handleKeydown(e: KeyboardEvent) {
 </template>
 
 <style scoped>
+.commit-panel {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.resize-handle {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 4px;
+  cursor: ns-resize;
+  background: transparent;
+  transition: background 0.15s ease;
+}
+
+.resize-handle:hover,
+.resize-handle:active {
+  background: var(--accent-cyan);
+}
+
 .commit-input {
   background: var(--bg-primary);
   border: 1px solid var(--border-default);
@@ -110,6 +191,7 @@ function handleKeydown(e: KeyboardEvent) {
   font-size: 0.7rem;
   border-radius: 2px;
   outline: none;
+  min-height: 40px;
 }
 
 .commit-input:focus {

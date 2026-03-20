@@ -510,6 +510,39 @@ fn git_clean_untracked(
     state.read().git_manager.clean_untracked(&repo_id, paths)
 }
 
+// ============ Clipboard Commands ============
+
+/// Save clipboard image data to a temp file and return the path
+#[tauri::command]
+fn save_clipboard_image(rgba_data: Vec<u8>, width: u32, height: u32) -> Result<String, String> {
+    use image::{ImageBuffer, Rgba};
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    // Create temp directory for clipboard images
+    let temp_dir = std::env::temp_dir().join("mythicor-clipboard");
+    std::fs::create_dir_all(&temp_dir)
+        .map_err(|e| format!("Failed to create temp directory: {}", e))?;
+
+    // Generate filename with timestamp
+    let timestamp = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_millis())
+        .unwrap_or(0);
+    let filename = format!("clipboard_{}.png", timestamp);
+    let file_path = temp_dir.join(&filename);
+
+    // Create image from RGBA data
+    let img: ImageBuffer<Rgba<u8>, Vec<u8>> =
+        ImageBuffer::from_raw(width, height, rgba_data)
+            .ok_or_else(|| "Failed to create image from RGBA data".to_string())?;
+
+    // Save as PNG
+    img.save(&file_path)
+        .map_err(|e| format!("Failed to save image: {}", e))?;
+
+    Ok(file_path.to_string_lossy().to_string())
+}
+
 // ============ AI Commands ============
 
 /// Generate a commit message from staged changes using the Anthropic API
@@ -537,7 +570,9 @@ async fn generate_commit_message(
                      Use conventional commit format (e.g., feat:, fix:, refactor:). \
                      First line should be under 72 characters. Add a blank line and brief \
                      body only if the changes are complex. Do not include any explanation \
-                     outside the commit message itself.\n\n```diff\n{}\n```",
+                     outside the commit message itself. Do not wrap the message in backticks \
+                     or any markdown formatting - output only the raw commit message text.\n\n\
+                     Diff:\n{}\n",
                     diff_text
                 )
             }]
@@ -575,6 +610,7 @@ pub fn run() {
 
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_clipboard_manager::init())
         .manage(state)
         .invoke_handler(tauri::generate_handler![
             // Terminal commands
@@ -622,6 +658,8 @@ pub fn run() {
             git_discard_file,
             git_discard_all,
             git_clean_untracked,
+            // Clipboard commands
+            save_clipboard_image,
             // AI commands
             generate_commit_message,
         ])
