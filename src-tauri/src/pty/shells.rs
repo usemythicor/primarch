@@ -2,6 +2,12 @@ use serde::{Deserialize, Serialize};
 use std::path::Path;
 use std::process::Command;
 
+#[cfg(windows)]
+use std::os::windows::process::CommandExt;
+
+#[cfg(windows)]
+const CREATE_NO_WINDOW: u32 = 0x08000000;
+
 /// Represents a detected shell on the system
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ShellInfo {
@@ -78,7 +84,11 @@ fn detect_shells_windows() -> Vec<ShellInfo> {
 
 #[cfg(windows)]
 fn detect_pwsh() -> Option<ShellInfo> {
-    let output = Command::new("where").arg("pwsh.exe").output().ok()?;
+    let output = Command::new("where")
+        .arg("pwsh.exe")
+        .creation_flags(CREATE_NO_WINDOW)
+        .output()
+        .ok()?;
 
     if output.status.success() {
         Some(ShellInfo {
@@ -95,7 +105,11 @@ fn detect_pwsh() -> Option<ShellInfo> {
 
 #[cfg(windows)]
 fn detect_windows_powershell() -> Option<ShellInfo> {
-    let output = Command::new("where").arg("powershell.exe").output().ok()?;
+    let output = Command::new("where")
+        .arg("powershell.exe")
+        .creation_flags(CREATE_NO_WINDOW)
+        .output()
+        .ok()?;
 
     if output.status.success() {
         Some(ShellInfo {
@@ -136,7 +150,10 @@ fn detect_git_bash() -> Option<ShellInfo> {
 fn detect_wsl_distros() -> Vec<ShellInfo> {
     let mut distros = Vec::new();
 
-    let output = Command::new("wsl.exe").args(["--list", "--quiet"]).output();
+    let output = Command::new("wsl.exe")
+        .args(["--list", "--quiet"])
+        .creation_flags(CREATE_NO_WINDOW)
+        .output();
 
     if let Ok(output) = output {
         if output.status.success() {

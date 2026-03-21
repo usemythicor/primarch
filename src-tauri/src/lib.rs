@@ -607,10 +607,13 @@ async fn generate_commit_message(
 fn is_cli_available(name: &str) -> bool {
     #[cfg(windows)]
     {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x08000000;
         std::process::Command::new("cmd")
             .args(["/C", name, "--version"])
             .stdout(std::process::Stdio::null())
             .stderr(std::process::Stdio::null())
+            .creation_flags(CREATE_NO_WINDOW)
             .status()
             .map(|s| s.success())
             .unwrap_or(false)
@@ -682,6 +685,8 @@ async fn generate_commit_message_cli(
             // --tools '' disables tool access so it only uses our prompt
             #[cfg(windows)]
             let result = {
+                use std::os::windows::process::CommandExt;
+                const CREATE_NO_WINDOW: u32 = 0x08000000;
                 let ps_command = format!(
                     "Set-Location '{}'; Get-Content -Raw '{}' | {} --tools '' -p -",
                     temp_dir.to_string_lossy().replace("'", "''"),
@@ -692,6 +697,7 @@ async fn generate_commit_message_cli(
                     .args(["-NoProfile", "-Command", &ps_command])
                     .stdout(Stdio::piped())
                     .stderr(Stdio::piped())
+                    .creation_flags(CREATE_NO_WINDOW)
                     .output()
             };
 

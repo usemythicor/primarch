@@ -203,14 +203,16 @@ onMounted(async () => {
       emit('title-change', title);
     });
 
-    // Handle clipboard paste (Ctrl+V or Ctrl+Shift+V)
+    // Intercept paste events at capture phase before xterm handles them
+    // This is the ONLY place we handle paste - prevents double-paste
+    terminalRef.value.addEventListener('paste', (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      handlePaste();
+    }, { capture: true });
+
+    // Handle clipboard copy (Ctrl+C with selection)
     terminal.attachCustomKeyEventHandler((event) => {
-      // Handle paste
-      if (event.type === 'keydown' && event.ctrlKey && (event.key === 'v' || event.key === 'V')) {
-        handlePaste();
-        return false; // Prevent default
-      }
-      // Handle copy (Ctrl+C with selection)
       if (event.type === 'keydown' && event.ctrlKey && (event.key === 'c' || event.key === 'C')) {
         const selection = terminal?.getSelection();
         if (selection) {

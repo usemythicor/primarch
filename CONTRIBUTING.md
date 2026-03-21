@@ -18,8 +18,8 @@ Please be respectful and constructive in all interactions. We're building someth
 
 ```bash
 # Clone the repository
-git clone https://github.com/primarch-sh/terminal.git
-cd terminal
+git clone https://github.com/mythicor/primarch.git
+cd primarch
 
 # Install dependencies
 npm install
