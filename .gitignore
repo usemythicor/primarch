@@ -26,3 +26,8 @@ dist-ssr
 # Windows reserved names (can be created by some tools/AI)
 nul
 NUL
+
+# Tauri signing keys
+*.key
+*.key.pub
+primarch.key*
