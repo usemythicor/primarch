@@ -3,7 +3,7 @@
 A modern, workspace-aware terminal emulator built with [Tauri 2](https://tauri.app/) and [Vue 3](https://vuejs.org/).
 
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
-![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS-lightgrey.svg)
+![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey.svg)
 ![Tauri](https://img.shields.io/badge/Tauri-2.x-orange.svg)
 
 ## Features
@@ -25,7 +25,23 @@ A modern, workspace-aware terminal emulator built with [Tauri 2](https://tauri.a
 
 ### Pre-built Binaries
 
-Download the latest release from the [Releases](https://github.com/primarch-sh/terminal/releases) page.
+Download the latest release from the [Releases](https://github.com/mythicor/terminal/releases) page.
+
+| Platform | File | Notes |
+|----------|------|-------|
+| **Windows** | `.msi` or `.exe` | MSI for enterprise, EXE for personal |
+| **macOS** | `.dmg` | Apple Silicon (M1/M2/M3/M4) |
+| **Linux** | `.AppImage` or `.deb` | AppImage runs on most distros |
+
+#### macOS Installation
+
+The app is not signed with an Apple Developer certificate, so macOS will block it by default. To run it:
+
+1. Download and open the `.dmg`
+2. Drag **Primarch** to Applications
+3. **First launch**: Right-click the app → **Open** → **Open** (bypasses Gatekeeper)
+
+Alternatively: System Settings → Privacy & Security → scroll down and click **Open Anyway**.
 
 ### Build from Source
 
@@ -39,7 +55,7 @@ Download the latest release from the [Releases](https://github.com/primarch-sh/t
 
 ```bash
 # Clone the repository
-git clone https://github.com/primarch-sh/terminal.git
+git clone https://github.com/mythicor/terminal.git
 cd terminal
 
 # Install dependencies
