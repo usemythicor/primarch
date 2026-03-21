@@ -965,6 +965,16 @@ pub fn run() {
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
+        .plugin(
+            tauri_plugin_global_shortcut::Builder::new()
+                .with_handler(|app, shortcut, event| {
+                    if event.state() == tauri_plugin_global_shortcut::ShortcutState::Pressed {
+                        // Emit event to frontend
+                        let _ = app.emit("global-shortcut", shortcut.to_string());
+                    }
+                })
+                .build(),
+        )
         .manage(state)
         .invoke_handler(tauri::generate_handler![
             // Terminal commands

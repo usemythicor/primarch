@@ -211,27 +211,63 @@ onMounted(async () => {
       handlePaste();
     }, { capture: true });
 
+    // Intercept app-level keyboard shortcuts at capture phase before xterm handles them
+    // This ensures shortcuts work on Windows where xterm may consume events
+    // We re-dispatch the event to window to ensure App.vue handler receives it
+    terminalRef.value.addEventListener('keydown', (event) => {
+      const isCtrlOrCmd = event.ctrlKey || event.metaKey;
+      let shouldRedispatch = false;
+
+      // App-level shortcuts that should bypass xterm
+      if (isCtrlOrCmd && event.shiftKey) {
+        if (['KeyD', 'KeyE', 'KeyW', 'KeyS', 'KeyG', 'Tab'].includes(event.code)) {
+          shouldRedispatch = true;
+        }
+      }
+      // Ctrl+P for command palette
+      if (isCtrlOrCmd && !event.shiftKey && event.code === 'KeyP') shouldRedispatch = true;
+      if (isCtrlOrCmd && event.code === 'Comma') shouldRedispatch = true;
+      if (event.ctrlKey && event.code === 'Tab') shouldRedispatch = true;
+      if (event.code === 'Escape') shouldRedispatch = true;
+
+      if (shouldRedispatch) {
+        event.preventDefault();
+        event.stopPropagation();
+        // Dispatch a new keyboard event to window so App.vue handler can process it
+        window.dispatchEvent(new KeyboardEvent('keydown', {
+          code: event.code,
+          key: event.key,
+          ctrlKey: event.ctrlKey,
+          shiftKey: event.shiftKey,
+          altKey: event.altKey,
+          metaKey: event.metaKey,
+          bubbles: true,
+        }));
+      }
+    }, { capture: true });
+
     // Handle clipboard copy (Ctrl+C with selection)
     terminal.attachCustomKeyEventHandler((event) => {
       if (event.type === 'keydown') {
         // Ctrl+C with selection: copy instead of SIGINT
-        if (event.ctrlKey && (event.key === 'c' || event.key === 'C')) {
+        if (event.ctrlKey && event.code === 'KeyC') {
           const selection = terminal?.getSelection();
           if (selection) {
             handleCopy(selection);
             return false;
           }
         }
-        // Let app-level shortcuts bubble up to window handler
+        // Let app-level shortcuts bubble up to window handler (use event.code for consistency)
         const isCtrlOrCmd = event.ctrlKey || event.metaKey;
         if (isCtrlOrCmd && event.shiftKey) {
-          const key = event.key.toUpperCase();
-          if (['D', 'E', 'W', 'S', 'G', 'P', 'TAB'].includes(key)) {
+          if (['KeyD', 'KeyE', 'KeyW', 'KeyS', 'KeyG', 'Tab'].includes(event.code)) {
             return false;
           }
         }
-        if (isCtrlOrCmd && event.key === ',') return false;
-        if (event.ctrlKey && event.key === 'Tab') return false;
+        // Ctrl+P for command palette
+        if (isCtrlOrCmd && !event.shiftKey && event.code === 'KeyP') return false;
+        if (isCtrlOrCmd && event.code === 'Comma') return false;
+        if (event.ctrlKey && event.code === 'Tab') return false;
       }
       return true;
     });

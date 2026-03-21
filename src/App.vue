@@ -2,6 +2,8 @@
 import { ref, onMounted, onUnmounted, computed, watch } from 'vue';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { getVersion } from '@tauri-apps/api/app';
+import { register, unregister } from '@tauri-apps/plugin-global-shortcut';
+import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import {
   FolderIcon,
   Cog6ToothIcon,
@@ -69,6 +71,7 @@ const showWorkspaceManager = ref(false);
 const showSettings = ref(false);
 const showCommandPalette = ref(false);
 const appVersion = ref('0.0.0');
+let globalShortcutUnlisten: UnlistenFn | null = null;
 
 const terminalCount = computed(() => layoutStore.terminalCount);
 
@@ -140,8 +143,8 @@ function closeModals() {
 function handleKeydown(e: KeyboardEvent) {
   let handled = false;
 
-  // Ctrl+Shift+P: Toggle command palette
-  if (e.ctrlKey && e.shiftKey && (e.key === 'P' || e.key === 'p')) {
+  // Ctrl+P: Toggle command palette (backup for when global shortcut doesn't fire)
+  if (e.ctrlKey && !e.shiftKey && e.code === 'KeyP') {
     if (!showCommandPalette.value) {
       closeModals();
       showCommandPalette.value = true;
@@ -151,51 +154,51 @@ function handleKeydown(e: KeyboardEvent) {
     handled = true;
   }
   // Ctrl+Shift+D: Split vertical
-  else if (e.ctrlKey && e.shiftKey && e.key === 'D') {
+  else if (e.ctrlKey && e.shiftKey && e.code === 'KeyD') {
     layoutStore.splitVertical();
     handled = true;
   }
   // Ctrl+Shift+E: Split horizontal
-  else if (e.ctrlKey && e.shiftKey && e.key === 'E') {
+  else if (e.ctrlKey && e.shiftKey && e.code === 'KeyE') {
     layoutStore.splitHorizontal();
     handled = true;
   }
   // Ctrl+Shift+W: Close pane
-  else if (e.ctrlKey && e.shiftKey && e.key === 'W') {
+  else if (e.ctrlKey && e.shiftKey && e.code === 'KeyW') {
     if (layoutStore.activePane) {
       layoutStore.closePane(layoutStore.activePane);
     }
     handled = true;
   }
   // Ctrl+Tab: Next pane
-  else if (e.ctrlKey && e.key === 'Tab' && !e.shiftKey) {
+  else if (e.ctrlKey && e.code === 'Tab' && !e.shiftKey) {
     layoutStore.focusNextPane();
     handled = true;
   }
   // Ctrl+Shift+Tab: Previous pane
-  else if (e.ctrlKey && e.shiftKey && e.key === 'Tab') {
+  else if (e.ctrlKey && e.shiftKey && e.code === 'Tab') {
     layoutStore.focusPreviousPane();
     handled = true;
   }
   // Ctrl+Shift+S: Toggle workspace manager
-  else if (e.ctrlKey && e.shiftKey && e.key === 'S') {
+  else if (e.ctrlKey && e.shiftKey && e.code === 'KeyS') {
     showSettings.value = false;
     showWorkspaceManager.value = !showWorkspaceManager.value;
     handled = true;
   }
   // Ctrl+,: Toggle settings
-  else if (e.ctrlKey && e.key === ',') {
+  else if (e.ctrlKey && e.code === 'Comma') {
     showWorkspaceManager.value = false;
     showSettings.value = !showSettings.value;
     handled = true;
   }
   // Ctrl+Shift+G: Toggle git sidebar
-  else if (e.ctrlKey && e.shiftKey && e.key === 'G') {
+  else if (e.ctrlKey && e.shiftKey && e.code === 'KeyG') {
     gitStore.toggleSidebar();
     handled = true;
   }
   // Escape: Close modals and diff viewer
-  else if (e.key === 'Escape') {
+  else if (e.code === 'Escape') {
     if (gitStore.diffVisible) {
       gitStore.closeDiff();
     } else {
@@ -231,11 +234,40 @@ onMounted(async () => {
   appVersion.value = await getVersion();
   // Check for updates silently on startup
   checkForUpdates(true);
+
+  // Register global shortcut for command palette (Ctrl+P)
+  // This bypasses WebView2 and works reliably on Windows
+  try {
+    await register('Control+P', () => {});
+  } catch (e) {
+    console.warn('Failed to register global shortcut Ctrl+P:', e);
+  }
+
+  // Listen for global shortcut events from Rust
+  globalShortcutUnlisten = await listen<string>('global-shortcut', (event) => {
+    if (event.payload.includes('P') && !event.payload.includes('Shift')) {
+      if (!showCommandPalette.value) {
+        closeModals();
+        showCommandPalette.value = true;
+      } else {
+        showCommandPalette.value = false;
+      }
+    }
+  });
 });
 
-onUnmounted(() => {
+onUnmounted(async () => {
   window.removeEventListener('keydown', handleKeydown, true);
   gitStore.stopCwdWatcher();
+  // Unregister global shortcut and event listener
+  if (globalShortcutUnlisten) {
+    globalShortcutUnlisten();
+  }
+  try {
+    await unregister('Control+P');
+  } catch (e) {
+    // Ignore errors during cleanup
+  }
 });
 </script>
 
