@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, computed, watch } from 'vue';
 import { getCurrentWindow } from '@tauri-apps/api/window';
+import { getVersion } from '@tauri-apps/api/app';
 import {
   FolderIcon,
   Cog6ToothIcon,
@@ -8,6 +9,7 @@ import {
   CodeBracketIcon,
   ArrowPathRoundedSquareIcon,
   CloudArrowUpIcon,
+  ArrowDownTrayIcon,
   MinusIcon,
   StopIcon,
   XMarkIcon,
@@ -21,6 +23,7 @@ import DiffViewer from './components/git/DiffViewer.vue';
 import { useLayoutStore } from './stores/layout';
 import { useSettingsStore } from './stores/settings';
 import { useGitStore } from './stores/git';
+import { useUpdater } from './composables/useUpdater';
 
 // Window controls
 const appWindow = getCurrentWindow();
@@ -59,8 +62,10 @@ interface ShellInfo {
 const layoutStore = useLayoutStore();
 const settingsStore = useSettingsStore();
 const gitStore = useGitStore();
+const { updateAvailable, updateInfo, isDownloading, checkForUpdates, downloadAndInstall, dismissUpdate } = useUpdater();
 const showWorkspaceManager = ref(false);
 const showSettings = ref(false);
+const appVersion = ref('0.0.0');
 
 const terminalCount = computed(() => layoutStore.terminalCount);
 
@@ -200,6 +205,10 @@ onMounted(async () => {
   // Track window maximize state
   isMaximized.value = await appWindow.isMaximized();
   appWindow.onResized(updateMaximizedState);
+  // Get app version
+  appVersion.value = await getVersion();
+  // Check for updates silently on startup
+  checkForUpdates(true);
 });
 
 onUnmounted(() => {
@@ -461,7 +470,19 @@ onUnmounted(() => {
           <Cog6ToothIcon class="w-3 h-3" />
           <span class="text-label">Settings</span>
         </button>
-        <span class="text-label" style="color: var(--text-muted);">v0.1.0</span>
+        <!-- Update available button -->
+        <button
+          v-if="updateAvailable"
+          @click="downloadAndInstall"
+          :disabled="isDownloading"
+          class="flex items-center gap-1.5 px-2 py-0.5 rounded transition-colors"
+          style="background: var(--accent-green); color: var(--bg-primary);"
+          :title="`Update to v${updateInfo?.version}`"
+        >
+          <ArrowDownTrayIcon class="w-3 h-3" />
+          <span class="text-label">{{ isDownloading ? 'Installing...' : `Update v${updateInfo?.version}` }}</span>
+        </button>
+        <span class="text-label" style="color: var(--text-muted);">v{{ appVersion }}</span>
       </div>
     </div>
 

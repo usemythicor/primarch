@@ -39,6 +39,8 @@ jobs:
 
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin' || '' }}
 
       - name: Install dependencies (Linux)
         if: matrix.platform == 'ubuntu-22.04'
@@ -71,6 +73,8 @@ jobs:
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           tagName: ${{ github.ref_name }}
           releaseName: 'Primarch ${{ github.ref_name }}'
@@ -83,6 +87,8 @@ jobs:
             | **macOS** | `.dmg` | Apple Silicon (M1/M2/M3/M4) |
             | **Linux** | `.AppImage` | Universal, runs on most distros |
             | **Linux (Debian/Ubuntu)** | `.deb` | Native package |
+
+            > **Auto-updates:** Primarch will automatically notify you when new versions are available. Click the update button in the status bar to install.
 
             ---
 
