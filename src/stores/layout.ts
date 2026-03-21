@@ -11,6 +11,7 @@ import {
   getAllTerminals,
   countTerminals,
 } from '../components/layout/LayoutTree';
+import type { LayoutPreset } from '../components/layout/presets';
 
 export const useLayoutStore = defineStore('layout', () => {
   // State
@@ -127,6 +128,23 @@ export const useLayoutStore = defineStore('layout', () => {
     }
   }
 
+  async function applyPreset(preset: LayoutPreset) {
+    let cwd: string | undefined;
+    if (activePane.value) {
+      const sessionId = sessionRegistry.value.get(activePane.value);
+      if (sessionId) {
+        try {
+          cwd = await invoke<string>('get_terminal_cwd', { sessionId });
+        } catch {
+          // Fall back to no cwd
+        }
+      }
+    }
+
+    sessionRegistry.value.clear();
+    setLayout(preset.build(cwd));
+  }
+
   function setLayout(layout: LayoutNode) {
     rootLayout.value = layout;
     const terminals = getAllTerminals(rootLayout.value);
@@ -186,6 +204,7 @@ export const useLayoutStore = defineStore('layout', () => {
     splitPane,
     splitHorizontal,
     splitVertical,
+    applyPreset,
     closePane,
     setActivePane,
     updateRatio: updateRatioAction,

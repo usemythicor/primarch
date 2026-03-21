@@ -27,6 +27,10 @@ dist-ssr
 nul
 NUL
 
+# Environment files
+.env
+.env.*
+
 # Tauri signing keys
 *.key
 *.key.pub

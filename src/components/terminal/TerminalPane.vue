@@ -213,15 +213,27 @@ onMounted(async () => {
 
     // Handle clipboard copy (Ctrl+C with selection)
     terminal.attachCustomKeyEventHandler((event) => {
-      if (event.type === 'keydown' && event.ctrlKey && (event.key === 'c' || event.key === 'C')) {
-        const selection = terminal?.getSelection();
-        if (selection) {
-          handleCopy(selection);
-          return false; // Prevent default (don't send SIGINT)
+      if (event.type === 'keydown') {
+        // Ctrl+C with selection: copy instead of SIGINT
+        if (event.ctrlKey && (event.key === 'c' || event.key === 'C')) {
+          const selection = terminal?.getSelection();
+          if (selection) {
+            handleCopy(selection);
+            return false;
+          }
         }
-        // No selection, let Ctrl+C pass through as SIGINT
+        // Let app-level shortcuts bubble up to window handler
+        const isCtrlOrCmd = event.ctrlKey || event.metaKey;
+        if (isCtrlOrCmd && event.shiftKey) {
+          const key = event.key.toUpperCase();
+          if (['D', 'E', 'W', 'S', 'G', 'P', 'TAB'].includes(key)) {
+            return false;
+          }
+        }
+        if (isCtrlOrCmd && event.key === ',') return false;
+        if (event.ctrlKey && event.key === 'Tab') return false;
       }
-      return true; // Let other keys pass through
+      return true;
     });
 
     // Run startup command if provided

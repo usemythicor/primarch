@@ -189,6 +189,10 @@ export const useSettingsStore = defineStore('settings', () => {
   async function detectAiClis() {
     try {
       availableAiClis.value = await invoke<string[]>('detect_ai_clis');
+      // Auto-select the first detected CLI if no provider has been chosen
+      if (aiProvider.value === 'none' && availableAiClis.value.length > 0) {
+        aiProvider.value = availableAiClis.value[0] as AiProvider;
+      }
     } catch {
       availableAiClis.value = [];
     }

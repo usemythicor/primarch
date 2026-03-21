@@ -16,8 +16,10 @@ import {
 } from '@heroicons/vue/24/outline';
 import PaneContainer from './components/layout/PaneContainer.vue';
 import ShellSelector from './components/terminal/ShellSelector.vue';
+import LayoutPresetPicker from './components/layout/LayoutPresetPicker.vue';
 import WorkspaceManager from './components/workspace/WorkspaceManager.vue';
 import SettingsPanel from './components/settings/SettingsPanel.vue';
+import CommandPalette from './components/palette/CommandPalette.vue';
 import GitSidebar from './components/git/GitSidebar.vue';
 import DiffViewer from './components/git/DiffViewer.vue';
 import { useLayoutStore } from './stores/layout';
@@ -65,6 +67,7 @@ const gitStore = useGitStore();
 const { updateAvailable, updateInfo, isDownloading, checkForUpdates, downloadAndInstall } = useUpdater();
 const showWorkspaceManager = ref(false);
 const showSettings = ref(false);
+const showCommandPalette = ref(false);
 const appVersion = ref('0.0.0');
 
 const terminalCount = computed(() => layoutStore.terminalCount);
@@ -130,62 +133,81 @@ function handleShellSelect(shell: ShellInfo) {
 function closeModals() {
   showWorkspaceManager.value = false;
   showSettings.value = false;
+  showCommandPalette.value = false;
 }
 
-// Keyboard shortcuts
+// Keyboard shortcuts (capture phase — fires once before any pane handlers)
 function handleKeydown(e: KeyboardEvent) {
+  let handled = false;
+
+  // Ctrl+Shift+P: Toggle command palette
+  if (e.ctrlKey && e.shiftKey && (e.key === 'P' || e.key === 'p')) {
+    if (!showCommandPalette.value) {
+      closeModals();
+      showCommandPalette.value = true;
+    } else {
+      showCommandPalette.value = false;
+    }
+    handled = true;
+  }
   // Ctrl+Shift+D: Split vertical
-  if (e.ctrlKey && e.shiftKey && e.key === 'D') {
-    e.preventDefault();
+  else if (e.ctrlKey && e.shiftKey && e.key === 'D') {
     layoutStore.splitVertical();
+    handled = true;
   }
   // Ctrl+Shift+E: Split horizontal
-  if (e.ctrlKey && e.shiftKey && e.key === 'E') {
-    e.preventDefault();
+  else if (e.ctrlKey && e.shiftKey && e.key === 'E') {
     layoutStore.splitHorizontal();
+    handled = true;
   }
   // Ctrl+Shift+W: Close pane
-  if (e.ctrlKey && e.shiftKey && e.key === 'W') {
-    e.preventDefault();
+  else if (e.ctrlKey && e.shiftKey && e.key === 'W') {
     if (layoutStore.activePane) {
       layoutStore.closePane(layoutStore.activePane);
     }
+    handled = true;
   }
   // Ctrl+Tab: Next pane
-  if (e.ctrlKey && e.key === 'Tab' && !e.shiftKey) {
-    e.preventDefault();
+  else if (e.ctrlKey && e.key === 'Tab' && !e.shiftKey) {
     layoutStore.focusNextPane();
+    handled = true;
   }
   // Ctrl+Shift+Tab: Previous pane
-  if (e.ctrlKey && e.shiftKey && e.key === 'Tab') {
-    e.preventDefault();
+  else if (e.ctrlKey && e.shiftKey && e.key === 'Tab') {
     layoutStore.focusPreviousPane();
+    handled = true;
   }
   // Ctrl+Shift+S: Toggle workspace manager
-  if (e.ctrlKey && e.shiftKey && e.key === 'S') {
-    e.preventDefault();
+  else if (e.ctrlKey && e.shiftKey && e.key === 'S') {
     showSettings.value = false;
     showWorkspaceManager.value = !showWorkspaceManager.value;
+    handled = true;
   }
   // Ctrl+,: Toggle settings
-  if (e.ctrlKey && e.key === ',') {
-    e.preventDefault();
+  else if (e.ctrlKey && e.key === ',') {
     showWorkspaceManager.value = false;
     showSettings.value = !showSettings.value;
+    handled = true;
   }
   // Ctrl+Shift+G: Toggle git sidebar
-  if (e.ctrlKey && e.shiftKey && e.key === 'G') {
-    e.preventDefault();
+  else if (e.ctrlKey && e.shiftKey && e.key === 'G') {
     gitStore.toggleSidebar();
+    handled = true;
   }
   // Escape: Close modals and diff viewer
-  if (e.key === 'Escape') {
+  else if (e.key === 'Escape') {
     if (gitStore.diffVisible) {
       gitStore.closeDiff();
     } else {
       closeModals();
       gitStore.hideSidebar();
     }
+    handled = true;
+  }
+
+  if (handled) {
+    e.preventDefault();
+    e.stopImmediatePropagation();
   }
 }
 
@@ -196,7 +218,7 @@ watch(terminalBg, (bg) => {
 }, { immediate: true });
 
 onMounted(async () => {
-  window.addEventListener('keydown', handleKeydown);
+  window.addEventListener('keydown', handleKeydown, true);
   // Set initial background
   document.documentElement.style.background = terminalBg.value;
   document.body.style.background = terminalBg.value;
@@ -212,7 +234,7 @@ onMounted(async () => {
 });
 
 onUnmounted(() => {
-  window.removeEventListener('keydown', handleKeydown);
+  window.removeEventListener('keydown', handleKeydown, true);
   gitStore.stopCwdWatcher();
 });
 </script>
@@ -272,6 +294,8 @@ onUnmounted(() => {
             </button>
           </div>
 
+          <LayoutPresetPicker />
+
           <ShellSelector @select="handleShellSelect" />
         </div>
       </div>
@@ -326,6 +350,24 @@ onUnmounted(() => {
 
       <!-- Modals -->
       <Teleport to="body">
+        <!-- Command Palette -->
+        <Transition
+          enter-active-class="transition duration-100 ease-out"
+          enter-from-class="opacity-0 -translate-y-2"
+          enter-to-class="opacity-100 translate-y-0"
+          leave-active-class="transition duration-75 ease-in"
+          leave-from-class="opacity-100 translate-y-0"
+          leave-to-class="opacity-0 -translate-y-2"
+        >
+          <CommandPalette
+            v-if="showCommandPalette"
+            @close="showCommandPalette = false"
+            @show-settings="showSettings = true"
+            @show-workspaces="showWorkspaceManager = true"
+            @toggle-git="gitStore.toggleSidebar()"
+          />
+        </Transition>
+
         <!-- Workspace Manager Modal -->
         <Transition
           enter-active-class="transition duration-150 ease-out"

@@ -603,6 +603,203 @@ async fn generate_commit_message(
         .ok_or_else(|| "No content in API response".to_string())
 }
 
+/// Resolve the user's full PATH by sourcing their shell config.
+/// On macOS, GUI apps get a minimal PATH missing ~/.local/bin, nvm, cargo, etc.
+#[cfg(not(windows))]
+pub(crate) fn resolve_user_path() -> String {
+    use std::sync::OnceLock;
+    static CACHED_PATH: OnceLock<String> = OnceLock::new();
+
+    CACHED_PATH
+        .get_or_init(|| {
+            // Use login interactive shell so both .zprofile AND .zshrc are sourced.
+            // Redirect stderr to /dev/null to suppress any prompt/config noise.
+            if let Ok(output) = std::process::Command::new("/bin/zsh")
+                .args(["-l", "-i", "-c", "echo $PATH"])
+                .stderr(std::process::Stdio::null())
+                .output()
+            {
+                if output.status.success() {
+                    let path = String::from_utf8_lossy(&output.stdout).trim().to_string();
+                    if !path.is_empty() {
+                        return path;
+                    }
+                }
+            }
+
+            // Fallback: append common user paths to current PATH
+            let current = std::env::var("PATH").unwrap_or_default();
+            if let Some(home) = dirs::home_dir() {
+                let home = home.to_string_lossy();
+                let extras = [
+                    format!("{}/.local/bin", home),
+                    format!("{}/.cargo/bin", home),
+                    "/opt/homebrew/bin".to_string(),
+                    "/opt/homebrew/sbin".to_string(),
+                ];
+                let mut parts: Vec<&str> = current.split(':').collect();
+                for extra in &extras {
+                    if !parts.contains(&extra.as_str()) {
+                        parts.push(extra);
+                    }
+                }
+                return parts.join(":");
+            }
+
+            current
+        })
+        .clone()
+}
+
+#[derive(serde::Serialize)]
+struct DirEntry {
+    name: String,
+    path: String,
+    is_dir: bool,
+}
+
+#[tauri::command]
+fn list_directory(path: String) -> Result<Vec<DirEntry>, String> {
+    let resolved = if path.starts_with('~') {
+        if let Some(home) = dirs::home_dir() {
+            home.join(&path[1..].trim_start_matches('/'))
+        } else {
+            std::path::PathBuf::from(&path)
+        }
+    } else {
+        std::path::PathBuf::from(&path)
+    };
+
+    let mut entries = Vec::new();
+    let read_dir = std::fs::read_dir(&resolved)
+        .map_err(|e| format!("Failed to read directory: {}", e))?;
+
+    for entry in read_dir.take(200) {
+        let entry = match entry {
+            Ok(e) => e,
+            Err(_) => continue,
+        };
+        let metadata = match entry.metadata() {
+            Ok(m) => m,
+            Err(_) => continue,
+        };
+        let name = entry.file_name().to_string_lossy().to_string();
+        // Skip hidden dirs in the listing
+        if name.starts_with('.') {
+            continue;
+        }
+        if metadata.is_dir() {
+            entries.push(DirEntry {
+                name,
+                path: entry.path().to_string_lossy().to_string(),
+                is_dir: true,
+            });
+        }
+    }
+
+    entries.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
+    Ok(entries)
+}
+
+#[tauri::command]
+async fn search_directories(query: String) -> Result<Vec<DirEntry>, String> {
+    if query.len() < 2 {
+        return Ok(vec![]);
+    }
+
+    // Use Spotlight on macOS for instant indexed search
+    #[cfg(target_os = "macos")]
+    {
+        let output = std::process::Command::new("mdfind")
+            .args([
+                "-name",
+                &query,
+                "-onlyin",
+                &dirs::home_dir()
+                    .map(|h| h.to_string_lossy().to_string())
+                    .unwrap_or_else(|| "/Users".to_string()),
+            ])
+            .output()
+            .map_err(|e| format!("mdfind failed: {}", e))?;
+
+        if output.status.success() {
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            let entries: Vec<DirEntry> = stdout
+                .lines()
+                .filter(|line| {
+                    let path = std::path::Path::new(line);
+                    path.is_dir()
+                        && !line.contains("/Library/")
+                        && !line.contains("/.Trash/")
+                        && !line.contains("/node_modules/")
+                        && !line.contains("/.git/")
+                        && !line.contains("/target/")
+                })
+                .take(50)
+                .map(|line| {
+                    let name = std::path::Path::new(line)
+                        .file_name()
+                        .map(|n| n.to_string_lossy().to_string())
+                        .unwrap_or_default();
+                    DirEntry {
+                        name,
+                        path: line.to_string(),
+                        is_dir: true,
+                    }
+                })
+                .collect();
+            return Ok(entries);
+        }
+    }
+
+    // Fallback for non-macOS: simple recursive search from home (depth-limited)
+    #[cfg(not(target_os = "macos"))]
+    {
+        let home = dirs::home_dir().unwrap_or_else(|| std::path::PathBuf::from("/"));
+        let query_lower = query.to_lowercase();
+        let mut results = Vec::new();
+
+        fn walk(dir: &std::path::Path, query: &str, results: &mut Vec<DirEntry>, depth: u32) {
+            if depth > 4 || results.len() >= 50 {
+                return;
+            }
+            let read_dir = match std::fs::read_dir(dir) {
+                Ok(rd) => rd,
+                Err(_) => return,
+            };
+            for entry in read_dir {
+                let entry = match entry {
+                    Ok(e) => e,
+                    Err(_) => continue,
+                };
+                let name = entry.file_name().to_string_lossy().to_string();
+                if name.starts_with('.') || name == "node_modules" || name == "target" {
+                    continue;
+                }
+                if let Ok(meta) = entry.metadata() {
+                    if meta.is_dir() {
+                        if name.to_lowercase().contains(query) {
+                            results.push(DirEntry {
+                                name: name.clone(),
+                                path: entry.path().to_string_lossy().to_string(),
+                                is_dir: true,
+                            });
+                        }
+                        walk(&entry.path(), query, results, depth + 1);
+                    }
+                }
+            }
+        }
+
+        walk(&home, &query_lower, &mut results, 0);
+        results.truncate(50);
+        return Ok(results);
+    }
+
+    #[allow(unreachable_code)]
+    Ok(vec![])
+}
+
 /// Check if a CLI tool is available (Windows-compatible)
 fn is_cli_available(name: &str) -> bool {
     #[cfg(windows)]
@@ -620,13 +817,20 @@ fn is_cli_available(name: &str) -> bool {
     }
     #[cfg(not(windows))]
     {
-        std::process::Command::new(name)
-            .arg("--version")
+        // On macOS, GUI apps have a minimal PATH. Use a login interactive
+        // shell to resolve the full PATH (needs -i so ~/.zshrc is sourced).
+        let full_path = resolve_user_path();
+
+        let mut cmd = std::process::Command::new(name);
+        cmd.arg("--version")
             .stdout(std::process::Stdio::null())
-            .stderr(std::process::Stdio::null())
-            .status()
-            .map(|s| s.success())
-            .unwrap_or(false)
+            .stderr(std::process::Stdio::null());
+
+        if !full_path.is_empty() {
+            cmd.env("PATH", &full_path);
+        }
+
+        cmd.status().map(|s| s.success()).unwrap_or(false)
     }
 }
 
@@ -709,11 +913,21 @@ async fn generate_commit_message_cli(
                     temp_file.to_string_lossy().replace("'", "'\\''"),
                     cli
                 );
-                Command::new("sh")
-                    .args(["-c", &shell_command])
+                let mut cmd = Command::new("sh");
+                cmd.args(["-c", &shell_command])
                     .stdout(Stdio::piped())
-                    .stderr(Stdio::piped())
-                    .output()
+                    .stderr(Stdio::piped());
+
+                // Ensure full user PATH is available on macOS
+                #[cfg(target_os = "macos")]
+                {
+                    let full_path = resolve_user_path();
+                    if !full_path.is_empty() {
+                        cmd.env("PATH", &full_path);
+                    }
+                }
+
+                cmd.output()
             };
 
             // Clean up temp file
@@ -804,6 +1018,9 @@ pub fn run() {
             generate_commit_message,
             generate_commit_message_cli,
             detect_ai_clis,
+            // Directory commands
+            list_directory,
+            search_directories,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

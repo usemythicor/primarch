@@ -69,6 +69,7 @@ impl TerminalSession {
             c
         } else if is_zsh {
             let mut c = CommandBuilder::new(&shell);
+            c.arg("-l"); // Login shell: sources .zprofile for PATH setup (Homebrew, etc.)
 
             // Create a temporary ZDOTDIR with a .zshenv that:
             // 1. Restores the original ZDOTDIR so user configs load normally
@@ -111,6 +112,20 @@ precmd_functions+=(__primarch_precmd)
         // This enables PowerShell 7.2+ to emit OSC 9;9 sequences with current directory
         cmd.env("TERM_PROGRAM", "Primarch");
         cmd.env("TERM_PROGRAM_VERSION", "0.1.0");
+
+        // Set TERM so the shell knows terminal capabilities (fixes delete key, etc.)
+        cmd.env("TERM", "xterm-256color");
+
+        // On macOS, GUI apps get a minimal PATH missing user paths like
+        // ~/.local/bin, ~/.cargo/bin, nvm, homebrew, etc. Always resolve
+        // the full login shell PATH and pass it to the PTY.
+        #[cfg(target_os = "macos")]
+        {
+            let full_path = crate::resolve_user_path();
+            if !full_path.is_empty() {
+                cmd.env("PATH", &full_path);
+            }
+        }
 
         // Spawn the shell
         let child = pty_pair
