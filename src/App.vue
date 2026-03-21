@@ -62,7 +62,7 @@ interface ShellInfo {
 const layoutStore = useLayoutStore();
 const settingsStore = useSettingsStore();
 const gitStore = useGitStore();
-const { updateAvailable, updateInfo, isDownloading, checkForUpdates, downloadAndInstall, dismissUpdate } = useUpdater();
+const { updateAvailable, updateInfo, isDownloading, checkForUpdates, downloadAndInstall } = useUpdater();
 const showWorkspaceManager = ref(false);
 const showSettings = ref(false);
 const appVersion = ref('0.0.0');
