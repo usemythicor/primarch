@@ -11,6 +11,7 @@ import { useSettingsStore } from '../../stores/settings';
 import { useLayoutStore } from '../../stores/layout';
 import { useGitStore } from '../../stores/git';
 import { getAliases } from '../../utils/aliases';
+import { MarkdownRenderer } from '../../utils/markdownRenderer';
 import '@xterm/xterm/css/xterm.css';
 
 const props = defineProps<{
@@ -35,6 +36,7 @@ const isConnected = ref(false);
 let terminal: Terminal | null = null;
 let fitAddon: FitAddon | null = null;
 let inputBuffer = ''; // Track current line input for alias expansion
+let markdownRenderer: MarkdownRenderer | null = null;
 const { createSession, startReading, write, resize, kill } = useTerminal();
 
 // Check if input matches an alias and return expanded command, or null if no match
@@ -148,6 +150,17 @@ onMounted(async () => {
   terminal.open(terminalRef.value);
   fitAddon.fit();
 
+  // Initialize markdown renderer
+  markdownRenderer = new MarkdownRenderer({
+    theme: settingsStore.currentTheme,
+    enabled: settingsStore.markdownRendering !== 'never',
+  });
+
+  // Set up flush callback for incomplete markdown blocks
+  markdownRenderer.setFlushCallback((data) => {
+    terminal?.write(data);
+  });
+
   // Create PTY session
   try {
     sessionId.value = await createSession(props.shell, props.cwd);
@@ -189,7 +202,15 @@ onMounted(async () => {
     await startReading(
       sessionId.value,
       (data) => {
-        terminal?.write(data);
+        // Process markdown if enabled
+        if (markdownRenderer && settingsStore.markdownRendering !== 'never') {
+          const processed = markdownRenderer.process(data);
+          if (processed) {
+            terminal?.write(processed);
+          }
+        } else {
+          terminal?.write(data);
+        }
       },
       () => {
         isConnected.value = false;
@@ -220,9 +241,15 @@ onMounted(async () => {
           const backspaces = '\b \b'.repeat(inputBuffer.length);
           await write(sessionId.value, backspaces);
 
+          // Notify markdown renderer about the command
+          markdownRenderer?.onCommand(expanded);
+
           // Send the expanded command + Enter
           await write(sessionId.value, expanded + '\r');
         } else {
+          // Notify markdown renderer about the command
+          markdownRenderer?.onCommand(inputBuffer);
+
           // No alias match, send Enter normally
           await write(sessionId.value, data);
         }

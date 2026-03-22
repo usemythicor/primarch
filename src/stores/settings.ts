@@ -7,6 +7,7 @@ import { themes, getThemeById, getDefaultTheme } from '../themes/presets';
 const STORAGE_KEY = 'primarch-settings';
 
 export type AiProvider = 'none' | 'api' | 'claude' | 'codex';
+export type MarkdownRenderingMode = 'auto' | 'always' | 'never';
 
 interface Settings {
   themeId: string;
@@ -17,6 +18,7 @@ interface Settings {
   accentColor: string;
   anthropicApiKey: string;
   aiProvider: AiProvider;
+  markdownRendering: MarkdownRenderingMode;
 }
 
 export interface AccentPreset {
@@ -46,6 +48,7 @@ const defaultSettings: Settings = {
   accentColor: 'cyan',
   anthropicApiKey: '',
   aiProvider: 'none',
+  markdownRendering: 'auto',
 };
 
 export const useSettingsStore = defineStore('settings', () => {
@@ -61,6 +64,7 @@ export const useSettingsStore = defineStore('settings', () => {
   const accentColor = ref(savedSettings.accentColor);
   const anthropicApiKey = ref(savedSettings.anthropicApiKey);
   const aiProvider = ref<AiProvider>(savedSettings.aiProvider);
+  const markdownRendering = ref<MarkdownRenderingMode>(savedSettings.markdownRendering);
   const availableAiClis = ref<string[]>([]);
 
   // Apply accent color to CSS variables
@@ -186,6 +190,10 @@ export const useSettingsStore = defineStore('settings', () => {
     aiProvider.value = provider;
   }
 
+  function setMarkdownRendering(mode: MarkdownRenderingMode) {
+    markdownRendering.value = mode;
+  }
+
   async function detectAiClis() {
     try {
       availableAiClis.value = await invoke<string[]>('detect_ai_clis');
@@ -223,7 +231,7 @@ export const useSettingsStore = defineStore('settings', () => {
 
   // Auto-save settings
   watch(
-    [themeId, fontSize, fontFamily, cursorBlink, cursorStyle, accentColor, anthropicApiKey, aiProvider],
+    [themeId, fontSize, fontFamily, cursorBlink, cursorStyle, accentColor, anthropicApiKey, aiProvider, markdownRendering],
     () => {
       saveSettings({
         themeId: themeId.value,
@@ -234,6 +242,7 @@ export const useSettingsStore = defineStore('settings', () => {
         accentColor: accentColor.value,
         anthropicApiKey: anthropicApiKey.value,
         aiProvider: aiProvider.value,
+        markdownRendering: markdownRendering.value,
       });
     },
     { deep: true }
@@ -249,6 +258,7 @@ export const useSettingsStore = defineStore('settings', () => {
     accentColor,
     anthropicApiKey,
     aiProvider,
+    markdownRendering,
     availableAiClis,
 
     // Computed
@@ -266,6 +276,7 @@ export const useSettingsStore = defineStore('settings', () => {
     setAccentColor,
     setAnthropicApiKey,
     setAiProvider,
+    setMarkdownRendering,
     detectAiClis,
     resetToDefaults,
   };
