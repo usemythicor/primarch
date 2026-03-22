@@ -70,6 +70,7 @@ function handleFocus() {
     <TerminalPane
       :key="node.id"
       :node-id="node.id"
+      :existing-session-id="node.sessionId"
       :shell="node.shell"
       :cwd="node.cwd"
       :startup-command="node.startupCommand"

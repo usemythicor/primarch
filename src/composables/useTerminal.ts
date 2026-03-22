@@ -55,6 +55,31 @@ export function useTerminal() {
   }
 
   /**
+   * Reattach to an existing PTY session (listen for events without starting a new reader thread)
+   */
+  async function reattachReading(
+    sessionId: string,
+    onData: (data: string) => void,
+    onClose?: () => void,
+    onError?: (error: string) => void
+  ): Promise<void> {
+    const unlistenData = await listen<string>(`terminal-data-${sessionId}`, (event) => {
+      onData(event.payload);
+    });
+
+    const unlistenClose = await listen(`terminal-closed-${sessionId}`, () => {
+      onClose?.();
+      cleanup(sessionId);
+    });
+
+    const unlistenError = await listen<string>(`terminal-error-${sessionId}`, (event) => {
+      onError?.(event.payload);
+    });
+
+    listeners.value.set(sessionId, [unlistenData, unlistenClose, unlistenError]);
+  }
+
+  /**
    * Write data to a terminal session
    */
   async function write(sessionId: string, data: string): Promise<void> {
@@ -109,9 +134,11 @@ export function useTerminal() {
     sessions,
     createSession,
     startReading,
+    reattachReading,
     write,
     resize,
     kill,
+    cleanup,
     getCwd,
   };
 }

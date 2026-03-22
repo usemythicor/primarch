@@ -1,7 +1,20 @@
-<script setup lang="ts">
-import { ref, onMounted, onUnmounted, watch, computed } from 'vue';
+<script lang="ts">
 import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
+import { MarkdownRenderer } from '../../utils/markdownRenderer';
+
+// Module-level cache: shared across ALL TerminalPane instances
+// Preserves xterm instances across splits so scrollback and display are not lost
+const xtermCache = new Map<string, {
+  terminal: Terminal;
+  fitAddon: FitAddon;
+  element: HTMLDivElement;
+  markdownRenderer: MarkdownRenderer | null;
+}>();
+</script>
+
+<script setup lang="ts">
+import { ref, onMounted, onUnmounted, watch, computed } from 'vue';
 import { WebLinksAddon } from '@xterm/addon-web-links';
 import { invoke } from '@tauri-apps/api/core';
 import { readText, readImage, writeText } from '@tauri-apps/plugin-clipboard-manager';
@@ -11,11 +24,11 @@ import { useSettingsStore } from '../../stores/settings';
 import { useLayoutStore } from '../../stores/layout';
 import { useGitStore } from '../../stores/git';
 import { getAliases } from '../../utils/aliases';
-import { MarkdownRenderer } from '../../utils/markdownRenderer';
 import '@xterm/xterm/css/xterm.css';
 
 const props = defineProps<{
   nodeId?: string;
+  existingSessionId?: string;
   shell?: string;
   cwd?: string;
   startupCommand?: string;
@@ -35,9 +48,10 @@ const isConnected = ref(false);
 
 let terminal: Terminal | null = null;
 let fitAddon: FitAddon | null = null;
+let xtermElement: HTMLDivElement | null = null; // Direct ref to the xterm wrapper div
 let inputBuffer = ''; // Track current line input for alias expansion
 let markdownRenderer: MarkdownRenderer | null = null;
-const { createSession, startReading, write, resize, kill } = useTerminal();
+const { createSession, startReading, reattachReading, write, resize, kill, cleanup } = useTerminal();
 
 // Check if input matches an alias and return expanded command, or null if no match
 function expandAlias(input: string): string | null {
@@ -125,45 +139,98 @@ watch(
 onMounted(async () => {
   if (!terminalRef.value) return;
 
-  const options = settingsStore.terminalOptions;
+  const reattachId = props.existingSessionId;
+  const isReattach = reattachId && layoutStore.isPendingReattach(reattachId);
+  const cached = isReattach ? xtermCache.get(reattachId) : null;
 
-  // Create xterm instance
-  terminal = new Terminal({
-    cursorBlink: options.cursorBlink,
-    cursorStyle: options.cursorStyle,
-    fontSize: options.fontSize,
-    fontFamily: options.fontFamily,
-    theme: options.theme,
-  });
+  if (cached) {
+    // Reuse existing xterm instance — preserves scrollback and display
+    terminal = cached.terminal;
+    fitAddon = cached.fitAddon;
+    markdownRenderer = cached.markdownRenderer;
+    // Move the xterm DOM element to our new container
+    xtermElement = cached.element;
+    terminalRef.value.appendChild(xtermElement);
+    xtermCache.delete(reattachId!);
+    fitAddon.fit();
+  } else {
+    const options = settingsStore.terminalOptions;
 
-  // Add addons
-  fitAddon = new FitAddon();
-  terminal.loadAddon(fitAddon);
-  terminal.loadAddon(new WebLinksAddon((_event, uri) => {
-    // Open links in default browser using Tauri's opener plugin
-    openUrl(uri).catch((err) => {
-      console.error('Failed to open URL:', err);
+    // Create xterm instance
+    terminal = new Terminal({
+      cursorBlink: options.cursorBlink,
+      cursorStyle: options.cursorStyle,
+      fontSize: options.fontSize,
+      fontFamily: options.fontFamily,
+      theme: options.theme,
     });
-  }));
 
-  // Mount to DOM
-  terminal.open(terminalRef.value);
-  fitAddon.fit();
+    // Add addons
+    fitAddon = new FitAddon();
+    terminal.loadAddon(fitAddon);
+    terminal.loadAddon(new WebLinksAddon((_event, uri) => {
+      openUrl(uri).catch((err) => {
+        console.error('Failed to open URL:', err);
+      });
+    }));
 
-  // Initialize markdown renderer
-  markdownRenderer = new MarkdownRenderer({
-    theme: settingsStore.currentTheme,
-    enabled: settingsStore.markdownRendering !== 'never',
-  });
+    // Create a wrapper div for the terminal so we can re-parent it later
+    xtermElement = document.createElement('div');
+    xtermElement.style.width = '100%';
+    xtermElement.style.height = '100%';
+    terminalRef.value.appendChild(xtermElement);
+    terminal.open(xtermElement);
+    fitAddon.fit();
 
-  // Set up flush callback for incomplete markdown blocks
-  markdownRenderer.setFlushCallback((data) => {
-    terminal?.write(data);
-  });
+    // Initialize markdown renderer
+    markdownRenderer = new MarkdownRenderer({
+      theme: settingsStore.currentTheme,
+      enabled: settingsStore.markdownRendering !== 'never',
+    });
 
-  // Create PTY session
+    markdownRenderer.setFlushCallback((data) => {
+      terminal?.write(data);
+    });
+  }
+
+  // Data handler for PTY output
+  const onPtyData = (data: string) => {
+    if (markdownRenderer && settingsStore.markdownRendering !== 'never') {
+      const processed = markdownRenderer.process(data);
+      if (processed) {
+        terminal?.write(processed);
+      }
+    } else {
+      terminal?.write(data);
+    }
+  };
+  const onPtyClose = () => {
+    isConnected.value = false;
+    emit('close');
+  };
+  const onPtyError = () => {
+    // Terminal read error - session may have ended
+  };
+
+  // Create or reattach PTY session
   try {
-    sessionId.value = await createSession(props.shell, props.cwd);
+    if (cached) {
+      // Reattach to existing PTY session (preserves running processes + display)
+      sessionId.value = reattachId!;
+      layoutStore.clearPendingReattach(reattachId!);
+      // Re-subscribe to PTY events
+      await reattachReading(sessionId.value, onPtyData, onPtyClose, onPtyError);
+      // Resize PTY to new dimensions
+      const dims = fitAddon.proposeDimensions();
+      if (dims) {
+        await resize(sessionId.value, dims.cols, dims.rows);
+      }
+    } else {
+      // Create a fresh PTY session
+      sessionId.value = await createSession(props.shell, props.cwd);
+      await startReading(sessionId.value, onPtyData, onPtyClose, onPtyError);
+    }
+
     isConnected.value = true;
 
     // Register session with layout store for cwd tracking
@@ -173,11 +240,8 @@ onMounted(async () => {
 
     // Try to detect git repository from CWD
     if (!gitStore.hasRepo) {
-      // Use provided cwd or try to get it from the terminal session
       const tryDetectGitRepo = async () => {
         let cwd = props.cwd;
-
-        // If no cwd provided, try to get it from the terminal session
         if (!cwd && sessionId.value) {
           try {
             cwd = await invoke<string>('get_terminal_cwd', { sessionId: sessionId.value });
@@ -185,41 +249,13 @@ onMounted(async () => {
             // CWD not available yet
           }
         }
-
         if (cwd) {
-          gitStore.openRepository(cwd).catch(() => {
-            // Not a git repo or failed to open - this is expected for non-git directories
-          });
+          gitStore.openRepository(cwd).catch(() => {});
         }
       };
-
-      // Try immediately and again after a short delay (terminal might need to initialize)
       tryDetectGitRepo();
       setTimeout(tryDetectGitRepo, 1000);
     }
-
-    // Start reading from PTY
-    await startReading(
-      sessionId.value,
-      (data) => {
-        // Process markdown if enabled
-        if (markdownRenderer && settingsStore.markdownRendering !== 'never') {
-          const processed = markdownRenderer.process(data);
-          if (processed) {
-            terminal?.write(processed);
-          }
-        } else {
-          terminal?.write(data);
-        }
-      },
-      () => {
-        isConnected.value = false;
-        emit('close');
-      },
-      () => {
-        // Terminal read error - session may have ended
-      }
-    );
 
     // Send terminal size to PTY
     const dimensions = fitAddon.proposeDimensions();
@@ -426,6 +462,21 @@ onUnmounted(async () => {
   // Unregister session from layout store
   if (props.nodeId) {
     layoutStore.unregisterSession(props.nodeId);
+  }
+
+  if (sessionId.value && layoutStore.isPendingReattach(sessionId.value)) {
+    // Split in progress — cache the xterm instance and keep PTY alive
+    cleanup(sessionId.value);
+    if (terminal && fitAddon && xtermElement) {
+      xtermCache.set(sessionId.value, {
+        terminal,
+        fitAddon,
+        element: xtermElement,
+        markdownRenderer,
+      });
+    }
+    // Don't dispose terminal or kill session
+    return;
   }
 
   if (sessionId.value) {

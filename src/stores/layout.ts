@@ -19,6 +19,8 @@ export const useLayoutStore = defineStore('layout', () => {
   const activePane = ref<string | undefined>(rootLayout.value.id);
   // Maps terminal node IDs to their PTY session IDs
   const sessionRegistry = ref<Map<string, string>>(new Map());
+  // PTY session IDs that should be preserved across a split (not killed on unmount)
+  const pendingReattach = ref<Set<string>>(new Set());
 
   // Getters
   const terminalCount = computed(() => countTerminals(rootLayout.value));
@@ -71,7 +73,23 @@ export const useLayoutStore = defineStore('layout', () => {
       }
     }
 
+    // Mark the existing PTY session for reattachment (don't kill it during split)
+    const existingSessionId = sessionRegistry.value.get(target);
+    if (existingSessionId) {
+      pendingReattach.value.add(existingSessionId);
+      // Safety net: clear after 5 seconds if not consumed
+      setTimeout(() => pendingReattach.value.delete(existingSessionId), 5000);
+    }
+
     rootLayout.value = splitNode(rootLayout.value, target, direction, finalOptions);
+
+    // Stamp the preserved session ID onto the copied node so TerminalPane can reattach
+    if (existingSessionId) {
+      const copiedNode = findNode(rootLayout.value, target);
+      if (copiedNode && copiedNode.type === 'terminal') {
+        copiedNode.sessionId = existingSessionId;
+      }
+    }
 
     // Set focus to the new pane
     const terminals = getAllTerminals(rootLayout.value);
@@ -96,6 +114,19 @@ export const useLayoutStore = defineStore('layout', () => {
   }
 
   function closePane(targetId: string) {
+    // Mark all surviving terminals for reattach so their PTY sessions + xterm instances are preserved
+    const allTerminals = getAllTerminals(rootLayout.value);
+    for (const t of allTerminals) {
+      if (t.id && t.id !== targetId) {
+        const ptySessionId = sessionRegistry.value.get(t.id);
+        if (ptySessionId) {
+          pendingReattach.value.add(ptySessionId);
+          t.sessionId = ptySessionId;
+          setTimeout(() => pendingReattach.value.delete(ptySessionId), 5000);
+        }
+      }
+    }
+
     const result = closeNode(rootLayout.value, targetId);
 
     if (result === null) {
@@ -172,6 +203,14 @@ export const useLayoutStore = defineStore('layout', () => {
     return sessionRegistry.value;
   }
 
+  function isPendingReattach(ptySessionId: string): boolean {
+    return pendingReattach.value.has(ptySessionId);
+  }
+
+  function clearPendingReattach(ptySessionId: string) {
+    pendingReattach.value.delete(ptySessionId);
+  }
+
   // Navigate between panes
   function focusNextPane() {
     const terminals = getAllTerminals(rootLayout.value);
@@ -219,5 +258,7 @@ export const useLayoutStore = defineStore('layout', () => {
     unregisterSession,
     getSessionId,
     getAllSessionMappings,
+    isPendingReattach,
+    clearPendingReattach,
   };
 });
