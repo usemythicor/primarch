@@ -12,12 +12,14 @@
   "app": {
     "windows": [
       {
-        "title": "Primarch",
+        "title": "",
         "width": 1200,
         "height": 800,
         "minWidth": 600,
         "minHeight": 400,
-        "decorations": false,
+        "decorations": true,
+        "titleBarStyle": "Overlay",
+        "trafficLightPosition": { "x": 12.0, "y": 18.0 },
         "resizable": true,
         "transparent": false
       }

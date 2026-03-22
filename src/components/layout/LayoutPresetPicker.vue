@@ -52,7 +52,7 @@ function closeDropdown() {
     >
       <div
         v-if="isOpen"
-        class="absolute top-full left-0 mt-1 w-56 z-50 overflow-hidden"
+        class="absolute top-full right-0 mt-1 w-56 z-50 overflow-hidden"
         style="background: var(--bg-secondary); border: 1px solid var(--border-default);"
       >
         <!-- Header -->

@@ -1032,6 +1032,18 @@ pub fn run() {
             list_directory,
             search_directories,
         ])
+        .setup(|_app| {
+            // On Windows, disable decorations for the custom title bar.
+            // macOS uses native decorations with titleBarStyle "Overlay" (set in config).
+            #[cfg(target_os = "windows")]
+            {
+                use tauri::Manager;
+                if let Some(window) = _app.get_webview_window("main") {
+                    let _ = window.set_decorations(false);
+                }
+            }
+            Ok(())
+        })
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

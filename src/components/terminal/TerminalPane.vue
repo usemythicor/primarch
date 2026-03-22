@@ -368,16 +368,22 @@ onMounted(async () => {
     terminal.writeln(`\x1b[31mFailed to create terminal session: ${error}\x1b[0m`);
   }
 
-  // Handle resize
+  // Handle resize - guard against zero-size containers during maximize/restore animations
   const resizeObserver = new ResizeObserver(() => {
     requestAnimationFrame(() => {
-      if (fitAddon && terminal && sessionId.value) {
-        fitAddon.fit();
-        // Force terminal to repaint and fill the space
-        terminal.refresh(0, terminal.rows - 1);
-        const dimensions = fitAddon.proposeDimensions();
-        if (dimensions) {
-          resize(sessionId.value, dimensions.cols, dimensions.rows);
+      if (fitAddon && terminal && sessionId.value && terminalRef.value) {
+        const { clientWidth, clientHeight } = terminalRef.value;
+        if (clientWidth === 0 || clientHeight === 0) return;
+
+        try {
+          fitAddon.fit();
+          terminal.refresh(0, terminal.rows - 1);
+          const dimensions = fitAddon.proposeDimensions();
+          if (dimensions && dimensions.cols > 0 && dimensions.rows > 0) {
+            resize(sessionId.value, dimensions.cols, dimensions.rows);
+          }
+        } catch {
+          // fit() can throw during animations - will recover on next resize
         }
       }
     });
@@ -385,8 +391,33 @@ onMounted(async () => {
 
   resizeObserver.observe(terminalRef.value);
 
+  // Fallback: re-fit after window resize settles (catches maximize/restore animations)
+  let resizeTimeout: ReturnType<typeof setTimeout> | null = null;
+  function handleWindowResize() {
+    if (resizeTimeout) clearTimeout(resizeTimeout);
+    resizeTimeout = setTimeout(() => {
+      if (fitAddon && terminal && sessionId.value && terminalRef.value) {
+        const { clientWidth, clientHeight } = terminalRef.value;
+        if (clientWidth === 0 || clientHeight === 0) return;
+        try {
+          fitAddon.fit();
+          terminal.refresh(0, terminal.rows - 1);
+          const dimensions = fitAddon.proposeDimensions();
+          if (dimensions && dimensions.cols > 0 && dimensions.rows > 0) {
+            resize(sessionId.value, dimensions.cols, dimensions.rows);
+          }
+        } catch {
+          // Ignore fit errors
+        }
+      }
+    }, 150);
+  }
+  window.addEventListener('resize', handleWindowResize);
+
   onUnmounted(() => {
     resizeObserver.disconnect();
+    window.removeEventListener('resize', handleWindowResize);
+    if (resizeTimeout) clearTimeout(resizeTimeout);
   });
 });
 
@@ -447,5 +478,6 @@ defineExpose({ focus });
 
 .terminal-pane :deep(.xterm-rows) {
   padding: 4px;
+  padding-left: var(--terminal-inset, 4px);
 }
 </style>

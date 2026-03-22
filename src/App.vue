@@ -32,6 +32,7 @@ import { useUpdater } from './composables/useUpdater';
 // Window controls
 const appWindow = getCurrentWindow();
 const isMaximized = ref(false);
+const isMacOS = navigator.platform.startsWith('Mac');
 
 function minimizeWindow() {
   appWindow.minimize();
@@ -225,6 +226,11 @@ onMounted(async () => {
   // Set initial background
   document.documentElement.style.background = terminalBg.value;
   document.body.style.background = terminalBg.value;
+  // On macOS, set terminal inset to align with title bar content and hide window title
+  if (isMacOS) {
+    document.documentElement.style.setProperty('--terminal-inset', '76px');
+    appWindow.setTitle('');
+  }
   // Start watching for CWD changes to update git
   gitStore.startCwdWatcher();
   // Track window maximize state
@@ -280,7 +286,9 @@ onUnmounted(async () => {
     >
       <!-- Left side - Logo, title and actions (draggable area) -->
       <div
-        class="flex items-center gap-4 flex-1 h-full px-4"
+        class="flex items-center gap-4 flex-1 h-full"
+        :class="isMacOS ? 'pl-20 pr-4' : 'px-4'"
+        data-tauri-drag-region
         @mousedown="startDrag"
         @dblclick="toggleMaximize"
       >
@@ -332,8 +340,8 @@ onUnmounted(async () => {
         </div>
       </div>
 
-      <!-- Window controls -->
-      <div class="flex items-center h-full">
+      <!-- Window controls (Windows only - macOS uses native traffic lights) -->
+      <div v-if="!isMacOS" class="flex items-center h-full">
         <button
           @click="minimizeWindow"
           class="window-control h-full px-4 flex items-center justify-center transition-colors"
