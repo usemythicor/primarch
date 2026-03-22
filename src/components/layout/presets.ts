@@ -20,15 +20,15 @@ export const layoutPresets: LayoutPreset[] = [
     build: (cwd) => createSplitNode('horizontal', t(cwd), t(cwd)),
   },
   {
-    id: '3-col',
-    name: '3 Columns',
+    id: '2-1',
+    name: '2 + Bottom',
     terminalCount: 3,
     build: (cwd) =>
       createSplitNode(
-        'horizontal',
-        t(cwd),
+        'vertical',
         createSplitNode('horizontal', t(cwd), t(cwd)),
-        0.333,
+        t(cwd),
+        0.6,
       ),
   },
   {
@@ -59,24 +59,20 @@ export const layoutPresets: LayoutPreset[] = [
       ),
   },
   {
-    id: '3x2',
-    name: '3x2 Grid',
+    id: '2x3',
+    name: '2x3 Grid',
     terminalCount: 6,
     build: (cwd) =>
       createSplitNode(
         'vertical',
+        createSplitNode('horizontal', t(cwd), t(cwd)),
         createSplitNode(
-          'horizontal',
-          t(cwd),
+          'vertical',
           createSplitNode('horizontal', t(cwd), t(cwd)),
-          0.333,
-        ),
-        createSplitNode(
-          'horizontal',
-          t(cwd),
           createSplitNode('horizontal', t(cwd), t(cwd)),
-          0.333,
+          0.667,
         ),
+        0.4,
       ),
   },
 ];

@@ -85,11 +85,11 @@ function closeDropdown() {
                 <rect x="1" y="1" width="12" height="18" rx="0.5" fill="none" stroke="var(--accent-cyan)" stroke-width="1" opacity="0.6" />
                 <rect x="15" y="1" width="12" height="18" rx="0.5" fill="none" stroke="var(--accent-cyan)" stroke-width="1" opacity="0.6" />
               </svg>
-              <!-- 3 Columns -->
-              <svg v-else-if="preset.id === '3-col'" viewBox="0 0 28 20" class="w-full h-full p-0.5">
-                <rect x="1" y="1" width="7.5" height="18" rx="0.5" fill="none" stroke="var(--accent-cyan)" stroke-width="1" opacity="0.6" />
-                <rect x="10.25" y="1" width="7.5" height="18" rx="0.5" fill="none" stroke="var(--accent-cyan)" stroke-width="1" opacity="0.6" />
-                <rect x="19.5" y="1" width="7.5" height="18" rx="0.5" fill="none" stroke="var(--accent-cyan)" stroke-width="1" opacity="0.6" />
+              <!-- 2 + Bottom -->
+              <svg v-else-if="preset.id === '2-1'" viewBox="0 0 28 20" class="w-full h-full p-0.5">
+                <rect x="1" y="1" width="12" height="10" rx="0.5" fill="none" stroke="var(--accent-cyan)" stroke-width="1" opacity="0.6" />
+                <rect x="15" y="1" width="12" height="10" rx="0.5" fill="none" stroke="var(--accent-cyan)" stroke-width="1" opacity="0.6" />
+                <rect x="1" y="13" width="26" height="6" rx="0.5" fill="none" stroke="var(--accent-cyan)" stroke-width="1" opacity="0.6" />
               </svg>
               <!-- 2x2 Grid -->
               <svg v-else-if="preset.id === '2x2'" viewBox="0 0 28 20" class="w-full h-full p-0.5">
@@ -106,14 +106,14 @@ function closeDropdown() {
                 <rect x="15" y="9" width="12" height="6" rx="0.5" fill="none" stroke="var(--accent-cyan)" stroke-width="1" opacity="0.6" />
                 <rect x="1" y="17" width="26" height="2" rx="0.5" fill="none" stroke="var(--accent-cyan)" stroke-width="1" opacity="0.6" />
               </svg>
-              <!-- 3x2 Grid -->
-              <svg v-else-if="preset.id === '3x2'" viewBox="0 0 28 20" class="w-full h-full p-0.5">
-                <rect x="1" y="1" width="7.5" height="8" rx="0.5" fill="none" stroke="var(--accent-cyan)" stroke-width="1" opacity="0.6" />
-                <rect x="10.25" y="1" width="7.5" height="8" rx="0.5" fill="none" stroke="var(--accent-cyan)" stroke-width="1" opacity="0.6" />
-                <rect x="19.5" y="1" width="7.5" height="8" rx="0.5" fill="none" stroke="var(--accent-cyan)" stroke-width="1" opacity="0.6" />
-                <rect x="1" y="11" width="7.5" height="8" rx="0.5" fill="none" stroke="var(--accent-cyan)" stroke-width="1" opacity="0.6" />
-                <rect x="10.25" y="11" width="7.5" height="8" rx="0.5" fill="none" stroke="var(--accent-cyan)" stroke-width="1" opacity="0.6" />
-                <rect x="19.5" y="11" width="7.5" height="8" rx="0.5" fill="none" stroke="var(--accent-cyan)" stroke-width="1" opacity="0.6" />
+              <!-- 2x3 Grid -->
+              <svg v-else-if="preset.id === '2x3'" viewBox="0 0 28 20" class="w-full h-full p-0.5">
+                <rect x="1" y="1" width="12" height="6.5" rx="0.5" fill="none" stroke="var(--accent-cyan)" stroke-width="1" opacity="0.6" />
+                <rect x="15" y="1" width="12" height="6.5" rx="0.5" fill="none" stroke="var(--accent-cyan)" stroke-width="1" opacity="0.6" />
+                <rect x="1" y="9" width="12" height="6.5" rx="0.5" fill="none" stroke="var(--accent-cyan)" stroke-width="1" opacity="0.6" />
+                <rect x="15" y="9" width="12" height="6.5" rx="0.5" fill="none" stroke="var(--accent-cyan)" stroke-width="1" opacity="0.6" />
+                <rect x="1" y="17" width="12" height="2" rx="0.5" fill="none" stroke="var(--accent-cyan)" stroke-width="1" opacity="0.6" />
+                <rect x="15" y="17" width="12" height="2" rx="0.5" fill="none" stroke="var(--accent-cyan)" stroke-width="1" opacity="0.6" />
               </svg>
             </div>
 

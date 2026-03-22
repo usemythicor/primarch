@@ -62,10 +62,8 @@ function handleFocus() {
   <div
     v-else-if="isTerminal"
     class="terminal-wrapper h-full w-full relative"
-    :style="{
-      background: terminalBg,
-      boxShadow: layoutStore.activePane === node.id ? 'inset 0 0 0 1px var(--accent-cyan)' : 'none',
-    }"
+    :class="{ 'pane-active': layoutStore.activePane === node.id }"
+    :style="{ background: terminalBg }"
     @click="handleFocus"
     @focusin="handleFocus"
   >
@@ -84,5 +82,14 @@ function handleFocus() {
 <style scoped>
 .terminal-wrapper {
   outline: none;
+}
+
+.terminal-wrapper.pane-active::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border: 1px solid color-mix(in srgb, var(--accent-cyan) 20%, transparent);
+  pointer-events: none;
+  z-index: 10;
 }
 </style>

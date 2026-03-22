@@ -154,13 +154,13 @@ function handleKeydown(e: KeyboardEvent) {
     }
     handled = true;
   }
-  // Ctrl+Shift+D: Split vertical
-  else if (e.ctrlKey && e.shiftKey && e.code === 'KeyD') {
+  // Ctrl+Shift+E: Split down (vertical split)
+  else if (e.ctrlKey && e.shiftKey && e.code === 'KeyE') {
     layoutStore.splitVertical();
     handled = true;
   }
-  // Ctrl+Shift+E: Split horizontal
-  else if (e.ctrlKey && e.shiftKey && e.code === 'KeyE') {
+  // Ctrl+Shift+D: Split right (horizontal split)
+  else if (e.ctrlKey && e.shiftKey && e.code === 'KeyD') {
     layoutStore.splitHorizontal();
     handled = true;
   }
