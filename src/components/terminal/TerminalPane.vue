@@ -10,6 +10,7 @@ import { useTerminal } from '../../composables/useTerminal';
 import { useSettingsStore } from '../../stores/settings';
 import { useLayoutStore } from '../../stores/layout';
 import { useGitStore } from '../../stores/git';
+import { getAliases } from '../../utils/aliases';
 import '@xterm/xterm/css/xterm.css';
 
 const props = defineProps<{
@@ -33,7 +34,21 @@ const isConnected = ref(false);
 
 let terminal: Terminal | null = null;
 let fitAddon: FitAddon | null = null;
+let inputBuffer = ''; // Track current line input for alias expansion
 const { createSession, startReading, write, resize, kill } = useTerminal();
+
+// Check if input matches an alias and return expanded command, or null if no match
+function expandAlias(input: string): string | null {
+  if (!input.startsWith('!')) return null;
+
+  const aliasName = input.slice(1).trim();
+  if (!aliasName) return null;
+
+  const aliases = getAliases();
+  const alias = aliases.find(a => a.name === aliasName);
+
+  return alias ? alias.command : null;
+}
 
 const bgColor = computed(() => settingsStore.currentTheme.background);
 
@@ -191,11 +206,51 @@ onMounted(async () => {
       await resize(sessionId.value, dimensions.cols, dimensions.rows);
     }
 
-    // Handle user input
+    // Handle user input with alias expansion support
     terminal.onData(async (data) => {
-      if (sessionId.value) {
-        await write(sessionId.value, data);
+      if (!sessionId.value) return;
+
+      // Check for Enter key (carriage return)
+      if (data === '\r') {
+        const expanded = expandAlias(inputBuffer.trim());
+
+        if (expanded) {
+          // Clear the typed alias from the terminal line
+          // Send backspaces to erase what was typed
+          const backspaces = '\b \b'.repeat(inputBuffer.length);
+          await write(sessionId.value, backspaces);
+
+          // Send the expanded command + Enter
+          await write(sessionId.value, expanded + '\r');
+        } else {
+          // No alias match, send Enter normally
+          await write(sessionId.value, data);
+        }
+
+        // Reset buffer after Enter
+        inputBuffer = '';
+        return;
       }
+
+      // Handle backspace (ASCII 127 or \b)
+      if (data === '\x7f' || data === '\b') {
+        if (inputBuffer.length > 0) {
+          inputBuffer = inputBuffer.slice(0, -1);
+        }
+        await write(sessionId.value, data);
+        return;
+      }
+
+      // Handle Ctrl+C, Ctrl+D, etc. - reset buffer
+      if (data.charCodeAt(0) < 32 && data !== '\t') {
+        inputBuffer = '';
+        await write(sessionId.value, data);
+        return;
+      }
+
+      // Regular character - add to buffer and send
+      inputBuffer += data;
+      await write(sessionId.value, data);
     });
 
     // Handle title changes
@@ -246,9 +301,14 @@ onMounted(async () => {
       }
     }, { capture: true });
 
-    // Handle clipboard copy (Ctrl+C with selection)
+    // Handle clipboard copy/paste
     terminal.attachCustomKeyEventHandler((event) => {
       if (event.type === 'keydown') {
+        // Ctrl+V: paste from clipboard
+        if (event.ctrlKey && event.code === 'KeyV') {
+          handlePaste();
+          return false;
+        }
         // Ctrl+C with selection: copy instead of SIGINT
         if (event.ctrlKey && event.code === 'KeyC') {
           const selection = terminal?.getSelection();
