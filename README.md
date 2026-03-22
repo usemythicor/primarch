@@ -19,6 +19,8 @@ A modern, workspace-aware terminal emulator built with [Tauri 2](https://tauri.a
 
 ## Screenshots
 
+![primarch-git](https://github.com/user-attachments/assets/a9240d2b-f5eb-473e-8093-59360fcd4fc3)
+
 <img width="1526" height="899" alt="image" src="https://github.com/user-attachments/assets/691e4337-b69e-4ea1-aa7e-3f224758608b" />
 
 <img width="1526" height="899" alt="image" src="https://github.com/user-attachments/assets/bde9b1ba-1344-4ae8-87fd-a98e5c141c57" />
@@ -81,6 +83,7 @@ Build outputs are located in `src-tauri/target/release/bundle/`.
 
 | Shortcut | Action |
 |----------|--------|
+| `Ctrl+P` | Open the Command Palette |
 | `Ctrl+Shift+E` | Split pane horizontally (new pane below) |
 | `Ctrl+Shift+D` | Split pane vertically (new pane to the right) |
 | `Ctrl+Shift+W` | Close current pane |
@@ -102,9 +105,14 @@ The git sidebar automatically detects repositories based on your terminal's curr
 - **Pull / Push** — Separate pull and push with commit count indicators
 
 ### AI Commit Messages
+Already using Claude Code or Codex CLI? Primarch detects them 
+automatically and uses your existing session to generate commit 
+messages — no API key, no new subscription, no extra cost.
 
+If you're not using either CLI, you can use an Anthropic API key directly:
 1. Open **Settings** (`Ctrl+,`)
-2. Paste your Anthropic API key in the **AI** section ([Get a key](https://console.anthropic.com/settings/keys))
+2. Paste your Anthropic API key in the **AI** section 
+   ([Get a key](https://console.anthropic.com/settings/keys))
 3. Stage some changes in the git sidebar
 4. Click the **AI** button above the commit message input
 
