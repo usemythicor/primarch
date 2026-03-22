@@ -23,6 +23,7 @@ A modern, workspace-aware terminal emulator built with [Tauri 2](https://tauri.a
 
 <img width="1526" height="899" alt="image" src="https://github.com/user-attachments/assets/bde9b1ba-1344-4ae8-87fd-a98e5c141c57" />
 
+<img width="1526" height="899" alt="image" src="https://github.com/user-attachments/assets/077653ea-a041-4cd0-a004-28ca7c9c367b" />
 
 
 ## Installation
