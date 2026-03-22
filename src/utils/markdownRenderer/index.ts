@@ -82,6 +82,18 @@ export class MarkdownRenderer {
       this.flushTimeout = null;
     }
 
+    // Pass through real-time status updates (carriage returns without newlines)
+    // These are used by CLIs like claude for spinner animations and progress updates
+    if (chunk.includes('\r') && !chunk.includes('\n')) {
+      return chunk;
+    }
+
+    // Pass through chunks with cursor control sequences (used for in-place updates)
+    // Matches: cursor movement, clear line, save/restore cursor
+    if (/\x1b\[[\d;]*[ABCDEFGJKST]|\x1b\[[\d;]*[su]|\x1b\[\?25[hl]/.test(chunk)) {
+      return chunk;
+    }
+
     // If markdown rendering is disabled or not active, pass through
     if (!this.enabled || !this.state.enabled) {
       // Still check for markdown patterns to auto-enable

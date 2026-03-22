@@ -215,7 +215,15 @@ export function renderMarkdown(
   ansiTheme: AnsiTheme,
   inCodeBlock: boolean = false
 ): { rendered: string; inCodeBlock: boolean } {
-  const lines = text.split('\n');
+  // If the text contains carriage returns (used for in-place updates like spinners),
+  // pass through without markdown processing to preserve terminal control behavior
+  if (text.includes('\r') && !text.includes('\r\n')) {
+    return { rendered: text, inCodeBlock };
+  }
+
+  // Normalize line endings (handle both \r\n and \n)
+  const normalizedText = text.replace(/\r\n/g, '\n');
+  const lines = normalizedText.split('\n');
   const renderedLines: string[] = [];
   let currentInCodeBlock = inCodeBlock;
 
