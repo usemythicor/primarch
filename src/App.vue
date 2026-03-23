@@ -67,7 +67,7 @@ interface ShellInfo {
 const layoutStore = useLayoutStore();
 const settingsStore = useSettingsStore();
 const gitStore = useGitStore();
-const { updateAvailable, updateInfo, isDownloading, checkForUpdates, downloadAndInstall } = useUpdater();
+const { updateAvailable, updateInfo, isDownloading, requiresManualUpdate, checkForUpdates, downloadAndInstall, openReleasesPage } = useUpdater();
 const showWorkspaceManager = ref(false);
 const showSettings = ref(false);
 const showCommandPalette = ref(false);
@@ -554,15 +554,26 @@ onUnmounted(async () => {
         </button>
         <!-- Update available button -->
         <button
-          v-if="updateAvailable"
+          v-if="updateAvailable && !requiresManualUpdate"
           @click="downloadAndInstall"
           :disabled="isDownloading"
-          class="flex items-center gap-1.5 px-2 py-0.5 rounded transition-colors"
-          style="background: var(--accent-green); color: var(--bg-primary);"
+          class="flex items-center gap-1.5 px-2 py-0.5 rounded transition-opacity cursor-pointer hover:opacity-80"
+          style="color: var(--accent-cyan);"
           :title="`Update to v${updateInfo?.version}`"
         >
-          <ArrowDownTrayIcon class="w-3 h-3" />
-          <span class="text-label">{{ isDownloading ? 'Installing...' : `Update v${updateInfo?.version}` }}</span>
+          <ArrowDownTrayIcon class="w-3 h-3" style="color: inherit;" />
+          <span class="text-label" style="color: inherit;">{{ isDownloading ? 'Installing...' : `Update v${updateInfo?.version}` }}</span>
+        </button>
+        <!-- Manual download button (macOS or auto-update failed) -->
+        <button
+          v-else-if="updateAvailable && requiresManualUpdate"
+          @click="openReleasesPage"
+          class="flex items-center gap-1.5 px-2 py-0.5 rounded transition-opacity cursor-pointer hover:opacity-80"
+          style="color: var(--accent-cyan);"
+          :title="`Download v${updateInfo?.version} from GitHub`"
+        >
+          <ArrowDownTrayIcon class="w-3 h-3" style="color: inherit;" />
+          <span class="text-label" style="color: inherit;">Download v{{ updateInfo?.version }}</span>
         </button>
         <span class="text-label" style="color: var(--text-muted);">v{{ appVersion }}</span>
       </div>

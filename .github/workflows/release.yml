@@ -111,3 +111,18 @@ jobs:
           releaseDraft: true
           prerelease: false
           args: ${{ matrix.args }}
+
+  sync-landing-version:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Update landing page version
+        env:
+          GH_PAT: ${{ secrets.LANDING_PAGE_PAT }}
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          git clone https://x-access-token:${GH_PAT}@github.com/usemythicor/terminal-landing.git
+          cd terminal-landing
+          sed -i "s/v[0-9]*\.[0-9]*\.[0-9]*/v$VERSION/g" src/components/Hero.vue src/components/CTA.vue
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git diff --quiet || (git commit -am "chore: bump version to v$VERSION" && git push)
