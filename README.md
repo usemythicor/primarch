@@ -32,7 +32,7 @@ A modern, workspace-aware terminal emulator built with [Tauri 2](https://tauri.a
 
 ### Pre-built Binaries
 
-Download the latest release from the [Releases](https://github.com/mythicor/primarch/releases) page.
+Download the latest release from the [Releases](https://github.com/usemythicor/primarch/releases) page.
 
 | Platform | File | Notes |
 |----------|------|-------|
@@ -62,7 +62,7 @@ Alternatively: System Settings → Privacy & Security → scroll down and click 
 
 ```bash
 # Clone the repository
-git clone https://github.com/mythicor/primarch.git
+git clone https://github.com/usemythicor/primarch.git
 cd primarch
 
 # Install dependencies

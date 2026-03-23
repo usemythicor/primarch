@@ -660,9 +660,9 @@ struct DirEntry {
 
 #[tauri::command]
 fn list_directory(path: String) -> Result<Vec<DirEntry>, String> {
-    let resolved = if path.starts_with('~') {
+    let resolved = if let Some(stripped) = path.strip_prefix('~') {
         if let Some(home) = dirs::home_dir() {
-            home.join(&path[1..].trim_start_matches('/'))
+            home.join(stripped.trim_start_matches('/'))
         } else {
             std::path::PathBuf::from(&path)
         }
