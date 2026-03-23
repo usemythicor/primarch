@@ -364,12 +364,11 @@ onMounted(async () => {
       }
     }, { capture: true });
 
-    // Handle clipboard copy/paste
+    // Handle clipboard copy and let app-level shortcuts bubble up
     terminal.attachCustomKeyEventHandler((event) => {
       if (event.type === 'keydown') {
-        // Ctrl+V: paste from clipboard
+        // Ctrl+V: let the paste event listener handle it (prevents double-paste)
         if (event.ctrlKey && event.code === 'KeyV') {
-          handlePaste();
           return false;
         }
         // Ctrl+C with selection: copy instead of SIGINT
