@@ -6,6 +6,9 @@ import { createAnsiTheme, renderMarkdown, preserveAnsi, restoreAnsi } from './re
 
 const DEFAULT_TRIGGER_COMMANDS = ['claude', 'glow', 'mdcat', 'bat', 'rich'];
 
+// Regex to detect cursor control / TUI escape sequences
+const TUI_SEQUENCE_RE = /\x1b\[[\d;]*[ABCDEFGHJKLMPSTXdfr]|\x1b\[[\d;]*[su]|\x1b\[\?\d+[hl]/;
+
 export class MarkdownRenderer {
   private ansiTheme: AnsiTheme;
   private enabled: boolean;
@@ -13,6 +16,8 @@ export class MarkdownRenderer {
   private state: MarkdownSessionState;
   private flushTimeout: ReturnType<typeof setTimeout> | null = null;
   private onFlush: ((data: string) => void) | null = null;
+  // When true, a TUI app (like Claude Code) is running — suppress markdown auto-enable
+  private tuiMode = false;
 
   constructor(options: MarkdownRendererOptions) {
     this.ansiTheme = createAnsiTheme(options.theme);
@@ -50,6 +55,8 @@ export class MarkdownRenderer {
    * Notify renderer that a command was entered
    */
   onCommand(command: string): void {
+    // Reset TUI mode on each new command — the next program may or may not be a TUI
+    this.tuiMode = false;
     if (this.enabled && this.shouldTrigger(command)) {
       this.state.enabled = true;
     }
@@ -88,9 +95,18 @@ export class MarkdownRenderer {
       return chunk;
     }
 
-    // Pass through chunks with cursor control sequences (used for in-place updates)
-    // Matches: cursor movement, clear line, save/restore cursor
-    if (/\x1b\[[\d;]*[ABCDEFGJKST]|\x1b\[[\d;]*[su]|\x1b\[\?25[hl]/.test(chunk)) {
+    // Pass through chunks with cursor control sequences (used for TUI/in-place updates)
+    // Matches: cursor movement/position (A-H,f,d), erase (J,K,X), insert/delete (L,M,P),
+    // scroll (S,T), scrolling region (r), save/restore cursor (s,u), DEC private modes (?...h/l)
+    if (TUI_SEQUENCE_RE.test(chunk)) {
+      // A TUI app is running — disable markdown rendering for the rest of this command
+      this.tuiMode = true;
+      this.state.enabled = false;
+      return chunk;
+    }
+
+    // TUI mode: pass everything through regardless of triggers or heuristics
+    if (this.tuiMode) {
       return chunk;
     }
 
@@ -172,6 +188,7 @@ export class MarkdownRenderer {
    */
   reset(): void {
     this.state = createSessionState(false);
+    this.tuiMode = false;
     if (this.flushTimeout) {
       clearTimeout(this.flushTimeout);
       this.flushTimeout = null;
