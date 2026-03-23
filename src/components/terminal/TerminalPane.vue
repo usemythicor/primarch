@@ -507,6 +507,8 @@ defineExpose({ focus });
   width: 100%;
   height: 100%;
   overflow: hidden;
+  padding: 4px;
+  box-sizing: border-box;
 }
 
 .terminal-container {
@@ -524,10 +526,5 @@ defineExpose({ focus });
 
 .terminal-pane :deep(.xterm-screen) {
   background-color: inherit !important;
-}
-
-.terminal-pane :deep(.xterm-rows) {
-  padding: 4px;
-  padding-left: 4px;
 }
 </style>
