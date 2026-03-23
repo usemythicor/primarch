@@ -528,6 +528,6 @@ defineExpose({ focus });
 
 .terminal-pane :deep(.xterm-rows) {
   padding: 4px;
-  padding-left: var(--terminal-inset, 4px);
+  padding-left: 4px;
 }
 </style>

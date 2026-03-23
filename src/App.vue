@@ -226,9 +226,8 @@ onMounted(async () => {
   // Set initial background
   document.documentElement.style.background = terminalBg.value;
   document.body.style.background = terminalBg.value;
-  // On macOS, set terminal inset to align with title bar content and hide window title
+  // On macOS, hide window title (traffic lights don't overlap terminal panes)
   if (isMacOS) {
-    document.documentElement.style.setProperty('--terminal-inset', '76px');
     appWindow.setTitle('');
   }
   // Start watching for CWD changes to update git
