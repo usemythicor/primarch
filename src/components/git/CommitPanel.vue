@@ -1,12 +1,48 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue';
 import { invoke } from '@tauri-apps/api/core';
-import { CheckIcon, SparklesIcon } from '@heroicons/vue/24/outline';
+import { CheckIcon, SparklesIcon, ChevronDownIcon } from '@heroicons/vue/24/outline';
 import { useGitStore } from '../../stores/git';
 import { useSettingsStore } from '../../stores/settings';
 
 const gitStore = useGitStore();
 const settingsStore = useSettingsStore();
+
+// Commit mode
+const COMMIT_MODE_KEY = 'primarch-commit-mode';
+type CommitMode = 'commit' | 'commit-push' | 'commit-sync' | 'amend';
+
+const commitMode = ref<CommitMode>('commit');
+const showModeDropdown = ref(false);
+
+const commitModes: { mode: CommitMode; label: string; description: string }[] = [
+  { mode: 'commit', label: 'Commit', description: 'Commit staged changes' },
+  { mode: 'commit-push', label: 'Commit & Push', description: 'Commit and push to remote' },
+  { mode: 'commit-sync', label: 'Commit & Sync', description: 'Commit, pull, then push' },
+  { mode: 'amend', label: 'Amend', description: 'Replace the last commit' },
+];
+
+onMounted(() => {
+  const saved = localStorage.getItem(COMMIT_MODE_KEY);
+  if (commitModes.some(m => m.mode === saved)) {
+    commitMode.value = saved as CommitMode;
+  }
+});
+
+function setCommitMode(mode: CommitMode) {
+  commitMode.value = mode;
+  localStorage.setItem(COMMIT_MODE_KEY, mode);
+  showModeDropdown.value = false;
+}
+
+const commitButtonLabel = computed(() => {
+  if (isCommitting.value) {
+    if (commitMode.value === 'amend') return 'AMENDING...';
+    return 'COMMITTING...';
+  }
+  const found = commitModes.find(m => m.mode === commitMode.value);
+  return found ? found.label.toUpperCase() : 'COMMIT';
+});
 
 // Resizable panel logic
 const STORAGE_KEY = 'primarch-commit-panel-height';
@@ -112,13 +148,30 @@ const commitMessage = computed({
   set: (value: string) => { gitStore.commitMessage = value; }
 });
 
-const canCommit = computed(() => gitStore.canCommit);
+const canCommit = computed(() => {
+  if (commitMode.value === 'amend') {
+    return !!gitStore.commitMessage.trim() && !gitStore.isCommitting;
+  }
+  return gitStore.canCommit;
+});
 const isCommitting = computed(() => gitStore.isCommitting);
 const stagedCount = computed(() => gitStore.stagedFiles.length);
 
 async function handleCommit() {
-  if (canCommit.value) {
-    await gitStore.commit();
+  if (commitMode.value === 'amend') {
+    if (!gitStore.commitMessage.trim()) return;
+    await gitStore.amend();
+    return;
+  }
+
+  if (!canCommit.value) return;
+  await gitStore.commit();
+  if (gitStore.error) return;
+
+  if (commitMode.value === 'commit-push') {
+    await gitStore.push();
+  } else if (commitMode.value === 'commit-sync') {
+    await gitStore.sync();
   }
 }
 
@@ -129,6 +182,22 @@ function handleKeydown(e: KeyboardEvent) {
     handleCommit();
   }
 }
+
+// Close dropdown on click outside
+function handleClickOutside(e: MouseEvent) {
+  const target = e.target as HTMLElement;
+  if (!target.closest('.commit-dropdown-area')) {
+    showModeDropdown.value = false;
+  }
+}
+
+onMounted(() => {
+  document.addEventListener('mousedown', handleClickOutside);
+});
+
+onUnmounted(() => {
+  document.removeEventListener('mousedown', handleClickOutside);
+});
 </script>
 
 <template>
@@ -165,20 +234,56 @@ function handleKeydown(e: KeyboardEvent) {
       :disabled="isCommitting"
     ></textarea>
 
-    <!-- Commit button -->
+    <!-- Commit button row -->
     <div class="flex items-center justify-between mt-2">
       <span class="text-label" style="color: var(--text-muted);">
         {{ stagedCount }} staged
       </span>
-      <button
-        @click="handleCommit"
-        :disabled="!canCommit"
-        class="commit-btn flex items-center gap-1.5 px-3 py-1"
-        :class="{ 'disabled': !canCommit, 'loading': isCommitting }"
-      >
-        <CheckIcon class="w-3.5 h-3.5" />
-        <span class="text-label">{{ isCommitting ? 'COMMITTING...' : 'COMMIT' }}</span>
-      </button>
+
+      <!-- Split button: main action + dropdown toggle -->
+      <div class="commit-dropdown-area relative">
+        <div class="commit-split-btn flex items-center" :class="{ 'disabled': !canCommit, 'loading': isCommitting }">
+          <button
+            @click="handleCommit"
+            :disabled="!canCommit"
+            class="commit-btn-main flex items-center gap-1.5 px-3 py-1"
+          >
+            <CheckIcon class="w-3.5 h-3.5" />
+            <span class="text-label">{{ commitButtonLabel }}</span>
+          </button>
+          <button
+            @click="showModeDropdown = !showModeDropdown"
+            :disabled="!canCommit && !showModeDropdown"
+            class="commit-btn-dropdown flex items-center px-1.5 py-1"
+          >
+            <ChevronDownIcon class="w-3 h-3" />
+          </button>
+        </div>
+
+        <!-- Dropdown menu -->
+        <Transition
+          enter-active-class="transition duration-100 ease-out"
+          enter-from-class="opacity-0 -translate-y-1"
+          enter-to-class="opacity-100 translate-y-0"
+          leave-active-class="transition duration-75 ease-in"
+          leave-from-class="opacity-100"
+          leave-to-class="opacity-0"
+        >
+          <div v-if="showModeDropdown" class="commit-dropdown">
+            <button
+              v-for="m in commitModes"
+              :key="m.mode"
+              class="dropdown-item"
+              :class="{ active: commitMode === m.mode }"
+              :title="m.description"
+              @click="setCommitMode(m.mode)"
+            >
+              <span class="text-label">{{ m.label }}</span>
+              <CheckIcon v-if="commitMode === m.mode" class="w-3 h-3" style="color: var(--accent-cyan);" />
+            </button>
+          </div>
+        </Transition>
+      </div>
     </div>
   </div>
 </template>
@@ -232,32 +337,105 @@ function handleKeydown(e: KeyboardEvent) {
   cursor: not-allowed;
 }
 
-.commit-btn {
-  background: rgba(var(--accent-rgb), 0.1);
+/* Split button container */
+.commit-split-btn {
   border: 1px solid var(--accent-cyan);
-  color: var(--accent-cyan);
-  font-weight: 600;
-  letter-spacing: 0.05em;
+  background: rgba(var(--accent-rgb), 0.1);
   transition: all 0.15s ease;
-  cursor: pointer;
 }
 
-.commit-btn:hover:not(.disabled) {
-  background: rgba(var(--accent-rgb), 0.2);
-  box-shadow: 0 0 10px rgba(var(--accent-rgb), 0.2);
-}
-
-.commit-btn.disabled {
+.commit-split-btn.disabled {
   opacity: 0.4;
-  cursor: not-allowed;
   border-color: var(--border-default);
-  color: var(--text-muted);
   background: transparent;
 }
 
-.commit-btn.loading {
+.commit-split-btn.loading {
   opacity: 0.7;
   cursor: wait;
+}
+
+/* Main commit button (left side) */
+.commit-btn-main {
+  background: transparent;
+  border: none;
+  color: var(--accent-cyan);
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.commit-btn-main:hover:not(:disabled) {
+  background: rgba(var(--accent-rgb), 0.1);
+}
+
+.commit-btn-main:disabled {
+  cursor: not-allowed;
+  color: var(--text-muted);
+}
+
+/* Dropdown toggle (right side) */
+.commit-btn-dropdown {
+  background: transparent;
+  border: none;
+  border-left: 1px solid rgba(var(--accent-rgb), 0.3);
+  color: var(--accent-cyan);
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.commit-btn-dropdown:hover:not(:disabled) {
+  background: rgba(var(--accent-rgb), 0.15);
+}
+
+.commit-btn-dropdown:disabled {
+  cursor: not-allowed;
+  color: var(--text-muted);
+}
+
+.commit-split-btn.disabled .commit-btn-dropdown {
+  border-left-color: var(--border-default);
+}
+
+.commit-split-btn:not(.disabled):hover {
+  box-shadow: 0 0 10px rgba(var(--accent-rgb), 0.2);
+}
+
+/* Dropdown menu */
+.commit-dropdown {
+  position: absolute;
+  bottom: calc(100% + 4px);
+  right: 0;
+  min-width: 160px;
+  padding: 4px 0;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-default);
+  box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.4);
+  z-index: 50;
+}
+
+.dropdown-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 6px 12px;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  cursor: pointer;
+  transition: all 0.1s ease;
+  text-align: left;
+}
+
+.dropdown-item:hover {
+  background: rgba(var(--accent-rgb), 0.1);
+  color: var(--text-primary);
+}
+
+.dropdown-item.active {
+  color: var(--accent-cyan);
 }
 
 .generate-btn {

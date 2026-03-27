@@ -372,6 +372,40 @@ pub fn create_commit(repo: &Repository, message: &str) -> Result<String, String>
     Ok(oid.to_string())
 }
 
+/// Amend the last commit with current staged changes and a new message
+pub fn amend_commit(repo: &Repository, message: &str) -> Result<String, String> {
+    let mut index = repo
+        .index()
+        .map_err(|e| format!("Failed to get index: {}", e))?;
+
+    let tree_oid = index
+        .write_tree()
+        .map_err(|e| format!("Failed to write tree: {}", e))?;
+
+    let tree = repo
+        .find_tree(tree_oid)
+        .map_err(|e| format!("Failed to find tree: {}", e))?;
+
+    let head = repo
+        .head()
+        .map_err(|_| "Cannot amend: no HEAD commit".to_string())?;
+
+    let head_commit = head
+        .peel_to_commit()
+        .map_err(|e| format!("Failed to get HEAD commit: {}", e))?;
+
+    let sig = repo
+        .signature()
+        .or_else(|_| Signature::now("Unknown", "unknown@example.com"))
+        .map_err(|e| format!("Failed to create signature: {}", e))?;
+
+    let oid = head_commit
+        .amend(Some("HEAD"), Some(&sig), Some(&sig), None, Some(message), Some(&tree))
+        .map_err(|e| format!("Failed to amend commit: {}", e))?;
+
+    Ok(oid.to_string())
+}
+
 /// Get credentials from git credential helper (supports Git Credential Manager)
 fn get_credentials_from_helper(url: &str) -> Option<(String, String)> {
     use std::io::Write;

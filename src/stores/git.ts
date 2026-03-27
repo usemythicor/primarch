@@ -254,6 +254,27 @@ export const useGitStore = defineStore('git', () => {
     }
   }
 
+  // Amend last commit
+  async function amend() {
+    if (!repoId.value || !commitMessage.value.trim()) return;
+
+    isCommitting.value = true;
+    error.value = null;
+
+    try {
+      await invoke('git_amend', {
+        repoId: repoId.value,
+        message: commitMessage.value.trim()
+      });
+      commitMessage.value = '';
+      await refreshStatus();
+    } catch (e) {
+      error.value = `Failed to amend: ${e}`;
+    } finally {
+      isCommitting.value = false;
+    }
+  }
+
   // Sidebar
   function toggleSidebar() {
     sidebarVisible.value = !sidebarVisible.value;
@@ -687,6 +708,7 @@ export const useGitStore = defineStore('git', () => {
     unstageFile,
     stageAll,
     commit,
+    amend,
     toggleSidebar,
     showSidebar,
     hideSidebar,

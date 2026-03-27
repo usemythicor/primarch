@@ -154,6 +154,12 @@ impl GitManager {
         repository::create_commit(&repo, message)
     }
 
+    /// Amend the last commit
+    pub fn amend(&self, id: &str, message: &str) -> Result<String, String> {
+        let repo = self.open_repo(id)?;
+        repository::amend_commit(&repo, message)
+    }
+
     /// Get diff for a specific file
     pub fn get_file_diff(&self, id: &str, path: &str, staged: bool) -> Result<FileDiff, String> {
         let repo = self.open_repo(id)?;

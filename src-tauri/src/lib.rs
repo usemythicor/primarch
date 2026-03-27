@@ -296,6 +296,16 @@ fn git_commit(
     state.read().git_manager.commit(&repo_id, &message)
 }
 
+/// Amend the last commit
+#[tauri::command]
+fn git_amend(
+    state: State<'_, Arc<RwLock<AppState>>>,
+    repo_id: String,
+    message: String,
+) -> Result<String, String> {
+    state.read().git_manager.amend(&repo_id, &message)
+}
+
 /// Get diff for a specific file
 #[tauri::command]
 fn git_diff_file(
@@ -1002,6 +1012,7 @@ pub fn run() {
             git_unstage_file,
             git_stage_all,
             git_commit,
+            git_amend,
             git_diff_file,
             git_diff_commit,
             git_diff_stats,
