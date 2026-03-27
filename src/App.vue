@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, computed, watch } from 'vue';
+import { invoke } from '@tauri-apps/api/core';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { getVersion } from '@tauri-apps/api/app';
 import { register, unregister } from '@tauri-apps/plugin-global-shortcut';
@@ -198,13 +199,21 @@ function handleKeydown(e: KeyboardEvent) {
     gitStore.toggleSidebar();
     handled = true;
   }
-  // Escape: Close modals and diff viewer
+  // Escape: Close modals/diff viewer AND always forward to terminal PTY
   else if (e.code === 'Escape') {
     if (gitStore.diffVisible) {
       gitStore.closeDiff();
-    } else {
+    } else if (showWorkspaceManager.value || showSettings.value || showCommandPalette.value || gitStore.sidebarVisible) {
       closeModals();
       gitStore.hideSidebar();
+    }
+    // Always send ESC to the active terminal so programs like Claude, vim, etc. receive it
+    const activeNodeId = layoutStore.activePane;
+    if (activeNodeId) {
+      const ptySessionId = layoutStore.getSessionId(activeNodeId);
+      if (ptySessionId) {
+        invoke('write_terminal', { sessionId: ptySessionId, data: '\x1b' }).catch(() => {});
+      }
     }
     handled = true;
   }

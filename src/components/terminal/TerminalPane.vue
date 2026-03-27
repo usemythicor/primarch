@@ -10,6 +10,7 @@ const xtermCache = new Map<string, {
   fitAddon: FitAddon;
   element: HTMLDivElement;
   markdownRenderer: MarkdownRenderer | null;
+  onDataDisposable: { dispose: () => void } | null;
 }>();
 </script>
 
@@ -51,6 +52,7 @@ let fitAddon: FitAddon | null = null;
 let xtermElement: HTMLDivElement | null = null; // Direct ref to the xterm wrapper div
 let inputBuffer = ''; // Track current line input for alias expansion
 let markdownRenderer: MarkdownRenderer | null = null;
+let onDataDisposable: { dispose: () => void } | null = null; // Track onData listener for cleanup on reattach
 const { createSession, startReading, reattachReading, write, resize, kill, cleanup } = useTerminal();
 
 // Check if input matches an alias and return expanded command, or null if no match
@@ -148,6 +150,10 @@ onMounted(async () => {
     terminal = cached.terminal;
     fitAddon = cached.fitAddon;
     markdownRenderer = cached.markdownRenderer;
+    // Dispose old onData handler to prevent duplicate input after split
+    if (cached.onDataDisposable) {
+      cached.onDataDisposable.dispose();
+    }
     // Move the xterm DOM element to our new container
     xtermElement = cached.element;
     terminalRef.value.appendChild(xtermElement);
@@ -264,7 +270,7 @@ onMounted(async () => {
     }
 
     // Handle user input with alias expansion support
-    terminal.onData(async (data) => {
+    onDataDisposable = terminal.onData(async (data) => {
       if (!sessionId.value) return;
 
       // Check for Enter key (carriage return)
@@ -346,7 +352,6 @@ onMounted(async () => {
       if (isCtrlOrCmd && !event.shiftKey && event.code === 'KeyP') shouldRedispatch = true;
       if (isCtrlOrCmd && event.code === 'Comma') shouldRedispatch = true;
       if (event.ctrlKey && event.code === 'Tab') shouldRedispatch = true;
-      if (event.code === 'Escape') shouldRedispatch = true;
 
       if (shouldRedispatch) {
         event.preventDefault();
@@ -472,6 +477,7 @@ onUnmounted(async () => {
         fitAddon,
         element: xtermElement,
         markdownRenderer,
+        onDataDisposable,
       });
     }
     // Don't dispose terminal or kill session

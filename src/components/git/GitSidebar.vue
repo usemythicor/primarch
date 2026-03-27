@@ -441,6 +441,7 @@ function hideBranchSelector() {
   width: 280px;
   min-width: 200px;
   max-width: 400px;
+  border-right: 1px solid var(--border-default);
 }
 
 .untracked-item:hover {
