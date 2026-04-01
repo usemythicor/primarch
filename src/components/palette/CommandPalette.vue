@@ -21,7 +21,7 @@ import { themes } from '../../themes/presets';
 import { fuzzyMatch } from '../../utils/fuzzyMatch';
 import { getRecentDirectories, addRecentDirectory } from '../../utils/recentDirectories';
 import { getAliases, saveAlias, deleteAlias, type CommandAlias } from '../../utils/aliases';
-import { CommandLineIcon, PlusIcon, TrashIcon } from '@heroicons/vue/24/outline';
+import { CommandLineIcon, PlusIcon, TrashIcon, DocumentTextIcon } from '@heroicons/vue/24/outline';
 
 interface DirEntry {
   name: string;
@@ -44,6 +44,7 @@ const emit = defineEmits<{
   (e: 'showSettings'): void;
   (e: 'showWorkspaces'): void;
   (e: 'toggleGit'): void;
+  (e: 'openMarkdown', source: string): void;
 }>();
 
 const layoutStore = useLayoutStore();
@@ -53,7 +54,7 @@ const workspaceStore = useWorkspaceStore();
 const inputRef = ref<HTMLInputElement | null>(null);
 const query = ref('');
 const selectedIndex = ref(0);
-const mode = ref<'commands' | 'directories' | 'themes' | 'layouts' | 'workspaces' | 'create-alias'>('commands');
+const mode = ref<'commands' | 'directories' | 'themes' | 'layouts' | 'workspaces' | 'create-alias' | 'markdown'>('commands');
 const directoryEntries = ref<DirEntry[]>([]);
 const searchResults = ref<DirEntry[]>([]);
 const browsePath = ref('');
@@ -64,6 +65,7 @@ const aliases = ref<CommandAlias[]>(getAliases());
 const aliasName = ref('');
 const aliasCommand = ref('');
 const aliasStep = ref<'name' | 'command'>('name');
+const markdownFiles = ref<string[]>([]);
 
 // Detect platform for shortcut display
 const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
@@ -82,6 +84,14 @@ const staticCommands: PaletteItem[] = [
     description: 'cd into a directory',
     icon: FolderIcon,
     action: () => enterMode('directories'),
+    score: 0,
+  },
+  {
+    id: 'preview-markdown',
+    label: 'Preview Markdown',
+    description: 'Open a .md file or URL',
+    icon: DocumentTextIcon,
+    action: () => enterMode('markdown'),
     score: 0,
   },
   {
@@ -369,6 +379,50 @@ const filteredItems = computed<PaletteItem[]>(() => {
     return items.sort((a, b) => b.score - a.score);
   }
 
+  if (mode.value === 'markdown') {
+    const items: PaletteItem[] = [];
+
+    // If query looks like a URL, offer to open it
+    if (q && (q.startsWith('http://') || q.startsWith('https://'))) {
+      items.push({
+        id: 'md-url',
+        label: 'Open URL',
+        description: q,
+        icon: DocumentTextIcon,
+        action: () => { emit('openMarkdown', q); close(); },
+        score: 1000,
+      });
+    }
+
+    // List discovered .md files
+    for (const file of markdownFiles.value) {
+      const name = file.replace(/\\/g, '/').split('/').pop() || file;
+      if (q && !q.startsWith('http')) {
+        const match = fuzzyMatch(q, name) || fuzzyMatch(q, file);
+        if (!match) continue;
+        items.push({
+          id: `md-${file}`,
+          label: name,
+          description: file,
+          icon: DocumentTextIcon,
+          action: () => { emit('openMarkdown', file); close(); },
+          score: match.score,
+        });
+      } else if (!q) {
+        items.push({
+          id: `md-${file}`,
+          label: name,
+          description: file,
+          icon: DocumentTextIcon,
+          action: () => { emit('openMarkdown', file); close(); },
+          score: 0,
+        });
+      }
+    }
+
+    return items.sort((a, b) => b.score - a.score);
+  }
+
   return [];
 });
 
@@ -430,6 +484,21 @@ function enterMode(newMode: typeof mode.value) {
       }
     } else {
       loadDirectoryEntries('~');
+    }
+  }
+
+  if (newMode === 'markdown') {
+    // Load .md files from current working directory
+    markdownFiles.value = [];
+    const activeId = layoutStore.activePane;
+    if (activeId) {
+      const sessionId = layoutStore.getSessionId(activeId);
+      if (sessionId) {
+        invoke<string>('get_terminal_cwd', { sessionId })
+          .then((cwd) => invoke<string[]>('list_markdown_files', { path: cwd }))
+          .then((files) => { markdownFiles.value = files; })
+          .catch(() => {});
+      }
     }
   }
 }
@@ -510,6 +579,12 @@ function handleKeydown(e: KeyboardEvent) {
     e.preventDefault();
     if (mode.value === 'create-alias') {
       handleCreateAliasSubmit();
+    } else if (mode.value === 'markdown') {
+      const source = query.value.trim();
+      if (source) {
+        emit('openMarkdown', source);
+        close();
+      }
     } else {
       const item = filteredItems.value[selectedIndex.value];
       if (item) item.action();
@@ -545,6 +620,7 @@ const modeLabel = computed(() => {
     case 'layouts': return 'Apply Layout';
     case 'workspaces': return 'Load Workspace';
     case 'create-alias': return aliasStep.value === 'name' ? 'New Alias' : `Alias: ${aliasName.value}`;
+    case 'markdown': return 'Preview Markdown';
     default: return '';
   }
 });
@@ -556,6 +632,7 @@ const placeholderText = computed(() => {
     case 'layouts': return 'Search layouts...';
     case 'workspaces': return 'Search workspaces...';
     case 'create-alias': return aliasStep.value === 'name' ? 'Enter alias name...' : 'Enter command to run...';
+    case 'markdown': return 'Enter file path or URL...';
     default: return 'Type a command...';
   }
 });

@@ -668,6 +668,61 @@ struct DirEntry {
     is_dir: bool,
 }
 
+/// List markdown files in a directory (recursive, max depth 3)
+#[tauri::command]
+fn list_markdown_files(path: String) -> Result<Vec<String>, String> {
+    let root = std::path::PathBuf::from(&path);
+    let mut files = Vec::new();
+
+    fn walk(dir: &std::path::Path, files: &mut Vec<String>, depth: usize) {
+        if depth > 3 {
+            return;
+        }
+        let Ok(entries) = std::fs::read_dir(dir) else {
+            return;
+        };
+        for entry in entries.take(500) {
+            let Ok(entry) = entry else { continue };
+            let path = entry.path();
+            let name = entry.file_name().to_string_lossy().to_string();
+            if name.starts_with('.') || name == "node_modules" || name == "target" {
+                continue;
+            }
+            if path.is_file() {
+                if let Some(ext) = path.extension() {
+                    if ext.eq_ignore_ascii_case("md") {
+                        files.push(path.to_string_lossy().to_string());
+                    }
+                }
+            } else if path.is_dir() {
+                walk(&path, files, depth + 1);
+            }
+        }
+    }
+
+    walk(&root, &mut files, 0);
+    files.sort();
+    Ok(files)
+}
+
+/// Read a text file and return its contents
+#[tauri::command]
+fn read_text_file(path: String) -> Result<String, String> {
+    std::fs::read_to_string(&path).map_err(|e| format!("Failed to read file: {}", e))
+}
+
+/// Fetch content from a URL
+#[tauri::command]
+async fn fetch_url(url: String) -> Result<String, String> {
+    let response = reqwest::get(&url)
+        .await
+        .map_err(|e| format!("Failed to fetch URL: {}", e))?;
+    response
+        .text()
+        .await
+        .map_err(|e| format!("Failed to read response: {}", e))
+}
+
 #[tauri::command]
 fn list_directory(path: String) -> Result<Vec<DirEntry>, String> {
     let resolved = if let Some(stripped) = path.strip_prefix('~') {
@@ -1039,6 +1094,10 @@ pub fn run() {
             generate_commit_message,
             generate_commit_message_cli,
             detect_ai_clis,
+            // File/URL commands
+            list_markdown_files,
+            read_text_file,
+            fetch_url,
             // Directory commands
             list_directory,
             search_directories,

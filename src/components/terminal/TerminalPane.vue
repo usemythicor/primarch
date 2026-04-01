@@ -291,7 +291,23 @@ onMounted(async () => {
   }
 
   // Data handler for PTY output
+  const oscRegex = /\x1b\]7777;([^;]+);([^\x07\x1b]*)\x07/g;
+
   const onPtyData = (data: string) => {
+    // Check for custom OSC sequences (e.g. open-md)
+    const match = oscRegex.exec(data);
+    if (match) {
+      const [fullMatch, command, arg] = match;
+      if (command === 'open-md' && arg) {
+        (window as any).__openMarkdownViewer?.(arg);
+      }
+      // Strip the OSC sequence from output so it doesn't render as garbage
+      data = data.replace(fullMatch, '');
+      oscRegex.lastIndex = 0;
+      if (!data) return;
+    }
+    oscRegex.lastIndex = 0;
+
     if (markdownRenderer && settingsStore.markdownRendering !== 'never') {
       const processed = markdownRenderer.process(data);
       if (processed) {

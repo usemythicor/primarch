@@ -73,6 +73,31 @@ const contextMenuItems = computed<ContextMenuItem[]>(() => {
     },
     { separator: true as const },
     {
+      label: 'Find',
+      shortcut: 'Ctrl+Shift+F',
+      action: () => terminalPaneRef.value?.toggleSearch(),
+    },
+    { separator: true as const },
+    {
+      label: 'New Tab',
+      shortcut: 'Ctrl+T',
+      action: () => layoutStore.addTab(),
+    },
+    {
+      label: 'Close Tab',
+      danger: layoutStore.tabs.length <= 1,
+      action: () => layoutStore.closeTab(layoutStore.activeTabId),
+    },
+    { separator: true as const },
+    {
+      label: 'Command Palette',
+      shortcut: 'Ctrl+P',
+      action: () => window.dispatchEvent(new KeyboardEvent('keydown', {
+        code: 'KeyP', key: 'p', ctrlKey: true, bubbles: true,
+      })),
+    },
+    { separator: true as const },
+    {
       label: 'Close Pane',
       shortcut: 'Ctrl+Shift+W',
       danger: true,

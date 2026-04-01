@@ -26,6 +26,7 @@ import SettingsPanel from './components/settings/SettingsPanel.vue';
 import CommandPalette from './components/palette/CommandPalette.vue';
 import GitSidebar from './components/git/GitSidebar.vue';
 import DiffViewer from './components/git/DiffViewer.vue';
+import MarkdownViewer from './components/viewer/MarkdownViewer.vue';
 import { useLayoutStore } from './stores/layout';
 import { useSettingsStore } from './stores/settings';
 import { useGitStore } from './stores/git';
@@ -73,6 +74,8 @@ const { updateAvailable, updateInfo, isDownloading, requiresManualUpdate, checkF
 const showWorkspaceManager = ref(false);
 const showSettings = ref(false);
 const showCommandPalette = ref(false);
+const showMarkdownViewer = ref(false);
+const markdownSource = ref<string>('');
 const appVersion = ref('0.0.0');
 let globalShortcutUnlisten: UnlistenFn | null = null;
 
@@ -129,6 +132,11 @@ const gitAhead = computed(() => gitStore.ahead);
 const gitBehind = computed(() => gitStore.behind);
 const gitHasRepo = computed(() => gitStore.hasRepo);
 const gitIsRemoteOperating = computed(() => gitStore.isRemoteOperating);
+
+function openMarkdownViewer(source: string) {
+  markdownSource.value = source;
+  showMarkdownViewer.value = true;
+}
 
 function handleShellSelect(shell: ShellInfo) {
   layoutStore.splitVertical(undefined, {
@@ -275,6 +283,8 @@ onMounted(async () => {
   if (isMacOS) {
     appWindow.setTitle('');
   }
+  // Expose markdown viewer opener globally
+  (window as any).__openMarkdownViewer = openMarkdownViewer;
   // Start watching for CWD changes to update git
   gitStore.startCwdWatcher();
   // Track window maximize state
@@ -435,6 +445,22 @@ onUnmounted(async () => {
         <PaneContainer :node="layoutStore.rootLayout" />
       </div>
 
+      <!-- Markdown Viewer (right side) -->
+      <Transition
+        enter-active-class="transition-all duration-200 ease-out"
+        enter-from-class="w-0 opacity-0"
+        enter-to-class="opacity-100"
+        leave-active-class="transition-all duration-150 ease-in"
+        leave-from-class="opacity-100"
+        leave-to-class="w-0 opacity-0"
+      >
+        <MarkdownViewer
+          v-if="showMarkdownViewer"
+          :source="markdownSource"
+          @close="showMarkdownViewer = false"
+        />
+      </Transition>
+
       <!-- Modals -->
       <Teleport to="body">
         <!-- Command Palette -->
@@ -452,6 +478,7 @@ onUnmounted(async () => {
             @show-settings="showSettings = true"
             @show-workspaces="showWorkspaceManager = true"
             @toggle-git="gitStore.toggleSidebar()"
+            @open-markdown="(source: string) => openMarkdownViewer(source)"
           />
         </Transition>
 
