@@ -160,6 +160,22 @@ const staticCommands: PaletteItem[] = [
     score: 0,
   },
   {
+    id: 'new-tab',
+    label: 'New Tab',
+    description: `${mod}+T`,
+    icon: PlusIcon,
+    action: () => { layoutStore.addTab(); close(); },
+    score: 0,
+  },
+  {
+    id: 'close-tab',
+    label: 'Close Tab',
+    description: `${mod}+W`,
+    icon: XMarkIcon,
+    action: () => { layoutStore.closeTab(layoutStore.activeTabId); close(); },
+    score: 0,
+  },
+  {
     id: 'create-alias',
     label: 'Create Alias',
     description: 'Save a command shortcut',

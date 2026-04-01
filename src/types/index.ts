@@ -20,6 +20,14 @@ export interface LayoutNode {
   title?: string;
 }
 
+export interface Tab {
+  id: string;
+  name: string;
+  layout: LayoutNode;
+  sessionRegistry: Map<string, string>;
+  pendingReattach: Set<string>;
+}
+
 export interface Workspace {
   id: string;
   name: string;

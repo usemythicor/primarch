@@ -18,6 +18,7 @@ import {
   XMarkIcon,
 } from '@heroicons/vue/24/outline';
 import PaneContainer from './components/layout/PaneContainer.vue';
+import TabBar from './components/layout/TabBar.vue';
 import ShellSelector from './components/terminal/ShellSelector.vue';
 import LayoutPresetPicker from './components/layout/LayoutPresetPicker.vue';
 import WorkspaceManager from './components/workspace/WorkspaceManager.vue';
@@ -155,6 +156,36 @@ function handleKeydown(e: KeyboardEvent) {
     }
     handled = true;
   }
+  // Ctrl+T: New tab
+  else if (e.ctrlKey && !e.shiftKey && e.code === 'KeyT') {
+    layoutStore.addTab();
+    handled = true;
+  }
+  // Ctrl+W: Close tab (when only one pane in tab) or close pane
+  else if (e.ctrlKey && !e.shiftKey && e.code === 'KeyW') {
+    if (layoutStore.activeTabTerminalCount <= 1) {
+      layoutStore.closeTab(layoutStore.activeTabId);
+    } else if (layoutStore.activePane) {
+      layoutStore.closePane(layoutStore.activePane);
+    }
+    handled = true;
+  }
+  // Ctrl+PageDown: Next tab
+  else if (e.ctrlKey && e.code === 'PageDown') {
+    layoutStore.nextTab();
+    handled = true;
+  }
+  // Ctrl+PageUp: Previous tab
+  else if (e.ctrlKey && e.code === 'PageUp') {
+    layoutStore.previousTab();
+    handled = true;
+  }
+  // Ctrl+1-9: Switch to tab by index
+  else if (e.ctrlKey && !e.shiftKey && e.code.match(/^Digit[1-9]$/)) {
+    const index = parseInt(e.code.replace('Digit', '')) - 1;
+    layoutStore.switchToTab(index);
+    handled = true;
+  }
   // Ctrl+Shift+E: Split down (vertical split)
   else if (e.ctrlKey && e.shiftKey && e.code === 'KeyE') {
     layoutStore.splitVertical();
@@ -192,6 +223,11 @@ function handleKeydown(e: KeyboardEvent) {
   else if (e.ctrlKey && e.code === 'Comma') {
     showWorkspaceManager.value = false;
     showSettings.value = !showSettings.value;
+    handled = true;
+  }
+  // Ctrl+Shift+F: Toggle terminal search
+  else if (e.ctrlKey && e.shiftKey && e.code === 'KeyF') {
+    layoutStore.triggerSearchToggle();
     handled = true;
   }
   // Ctrl+Shift+G: Toggle git sidebar
@@ -373,6 +409,9 @@ onUnmounted(async () => {
         </button>
       </div>
     </div>
+
+    <!-- Tab bar (only show when multiple tabs) -->
+    <TabBar v-if="layoutStore.tabs.length > 1" />
 
     <!-- Layout area -->
     <div class="flex-1 overflow-hidden relative min-h-0 flex" :style="{ background: terminalBg }">

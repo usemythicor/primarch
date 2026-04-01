@@ -1,6 +1,7 @@
 <script lang="ts">
 import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
+import { SearchAddon } from '@xterm/addon-search';
 import { MarkdownRenderer } from '../../utils/markdownRenderer';
 
 // Module-level cache: shared across ALL TerminalPane instances
@@ -8,6 +9,7 @@ import { MarkdownRenderer } from '../../utils/markdownRenderer';
 const xtermCache = new Map<string, {
   terminal: Terminal;
   fitAddon: FitAddon;
+  searchAddon: SearchAddon;
   element: HTMLDivElement;
   markdownRenderer: MarkdownRenderer | null;
   onDataDisposable: { dispose: () => void } | null;
@@ -25,6 +27,7 @@ import { useSettingsStore } from '../../stores/settings';
 import { useLayoutStore } from '../../stores/layout';
 import { useGitStore } from '../../stores/git';
 import { getAliases } from '../../utils/aliases';
+import SearchBar from './SearchBar.vue';
 import '@xterm/xterm/css/xterm.css';
 
 const props = defineProps<{
@@ -49,10 +52,91 @@ const isConnected = ref(false);
 
 let terminal: Terminal | null = null;
 let fitAddon: FitAddon | null = null;
+let searchAddon: SearchAddon | null = null;
 let xtermElement: HTMLDivElement | null = null; // Direct ref to the xterm wrapper div
 let inputBuffer = ''; // Track current line input for alias expansion
 let markdownRenderer: MarkdownRenderer | null = null;
 let onDataDisposable: { dispose: () => void } | null = null; // Track onData listener for cleanup on reattach
+
+// Search state
+const showSearch = ref(false);
+let lastSearchQuery = '';
+let lastSearchOptions: { caseSensitive: boolean; regex: boolean } = { caseSensitive: false, regex: false };
+
+function toggleSearch() {
+  showSearch.value = !showSearch.value;
+  if (!showSearch.value && searchAddon) {
+    searchAddon.clearDecorations();
+  }
+}
+
+const searchDecorations = {
+  matchBackground: '#3a3520',
+  matchBorder: '#8a7a30',
+  matchOverviewRuler: '#ffd93d',
+  activeMatchBackground: '#5a4a00',
+  activeMatchBorder: '#ffd93d',
+  activeMatchColorOverviewRuler: '#ffd93d',
+};
+
+const searchResultCount = ref(0);
+const searchResultIndex = ref(-1);
+
+function setupSearchResultListener() {
+  if (!searchAddon) return;
+  searchAddon.onDidChangeResults((e) => {
+    searchResultCount.value = e.resultCount;
+    searchResultIndex.value = e.resultIndex;
+  });
+}
+
+function handleSearch(query: string, options: { caseSensitive: boolean; regex: boolean }) {
+  if (!searchAddon) return;
+  lastSearchQuery = query;
+  lastSearchOptions = options;
+  if (!query) {
+    searchAddon.clearDecorations();
+    searchResultCount.value = 0;
+    searchResultIndex.value = -1;
+    return;
+  }
+  searchAddon.findNext(query, {
+    caseSensitive: options.caseSensitive,
+    regex: options.regex,
+    decorations: searchDecorations,
+    incremental: true,
+  });
+}
+
+function handleSearchNext() {
+  if (!searchAddon || !lastSearchQuery) return;
+  searchAddon.findNext(lastSearchQuery, {
+    ...lastSearchOptions,
+    decorations: searchDecorations,
+  });
+}
+
+function handleSearchPrevious() {
+  if (!searchAddon || !lastSearchQuery) return;
+  searchAddon.findPrevious(lastSearchQuery, {
+    ...lastSearchOptions,
+    decorations: searchDecorations,
+  });
+}
+
+function closeSearch() {
+  showSearch.value = false;
+  searchAddon?.clearDecorations();
+  terminal?.focus();
+}
+
+// Watch for search toggle signal from layout store (only respond if this is the active pane)
+watch(() => layoutStore.searchToggleSignal, () => {
+  if (props.nodeId && layoutStore.activePane === props.nodeId) {
+    toggleSearch();
+  }
+});
+
 const { createSession, startReading, reattachReading, write, resize, kill, cleanup } = useTerminal();
 
 // Check if input matches an alias and return expanded command, or null if no match
@@ -149,6 +233,8 @@ onMounted(async () => {
     // Reuse existing xterm instance — preserves scrollback and display
     terminal = cached.terminal;
     fitAddon = cached.fitAddon;
+    searchAddon = cached.searchAddon;
+    setupSearchResultListener();
     markdownRenderer = cached.markdownRenderer;
     // Dispose old onData handler to prevent duplicate input after split
     if (cached.onDataDisposable) {
@@ -169,6 +255,7 @@ onMounted(async () => {
       fontSize: options.fontSize,
       fontFamily: options.fontFamily,
       theme: options.theme,
+      allowProposedApi: true,
     });
 
     // Add addons
@@ -179,6 +266,10 @@ onMounted(async () => {
         console.error('Failed to open URL:', err);
       });
     }));
+
+    searchAddon = new SearchAddon();
+    terminal.loadAddon(searchAddon);
+    setupSearchResultListener();
 
     // Create a wrapper div for the terminal so we can re-parent it later
     xtermElement = document.createElement('div');
@@ -352,6 +443,13 @@ onMounted(async () => {
       if (isCtrlOrCmd && !event.shiftKey && event.code === 'KeyP') shouldRedispatch = true;
       if (isCtrlOrCmd && event.code === 'Comma') shouldRedispatch = true;
       if (event.ctrlKey && event.code === 'Tab') shouldRedispatch = true;
+      // Tab shortcuts: Ctrl+T, Ctrl+W, Ctrl+PageDown/Up, Ctrl+1-9
+      if (isCtrlOrCmd && !event.shiftKey && event.code === 'KeyT') shouldRedispatch = true;
+      if (isCtrlOrCmd && !event.shiftKey && event.code === 'KeyW') shouldRedispatch = true;
+      if (isCtrlOrCmd && (event.code === 'PageDown' || event.code === 'PageUp')) shouldRedispatch = true;
+      if (isCtrlOrCmd && !event.shiftKey && event.code.match(/^Digit[1-9]$/)) shouldRedispatch = true;
+      // Ctrl+Shift+F for terminal search
+      if (isCtrlOrCmd && event.shiftKey && event.code === 'KeyF') shouldRedispatch = true;
 
       if (shouldRedispatch) {
         event.preventDefault();
@@ -387,7 +485,7 @@ onMounted(async () => {
         // Let app-level shortcuts bubble up to window handler (use event.code for consistency)
         const isCtrlOrCmd = event.ctrlKey || event.metaKey;
         if (isCtrlOrCmd && event.shiftKey) {
-          if (['KeyD', 'KeyE', 'KeyW', 'KeyS', 'KeyG', 'Tab'].includes(event.code)) {
+          if (['KeyD', 'KeyE', 'KeyW', 'KeyS', 'KeyG', 'KeyF', 'Tab'].includes(event.code)) {
             return false;
           }
         }
@@ -395,6 +493,11 @@ onMounted(async () => {
         if (isCtrlOrCmd && !event.shiftKey && event.code === 'KeyP') return false;
         if (isCtrlOrCmd && event.code === 'Comma') return false;
         if (event.ctrlKey && event.code === 'Tab') return false;
+        // Tab shortcuts
+        if (isCtrlOrCmd && !event.shiftKey && event.code === 'KeyT') return false;
+        if (isCtrlOrCmd && !event.shiftKey && event.code === 'KeyW') return false;
+        if (isCtrlOrCmd && (event.code === 'PageDown' || event.code === 'PageUp')) return false;
+        if (isCtrlOrCmd && !event.shiftKey && event.code.match(/^Digit[1-9]$/)) return false;
       }
       return true;
     });
@@ -471,10 +574,11 @@ onUnmounted(async () => {
   if (sessionId.value && layoutStore.isPendingReattach(sessionId.value)) {
     // Split in progress — cache the xterm instance and keep PTY alive
     cleanup(sessionId.value);
-    if (terminal && fitAddon && xtermElement) {
+    if (terminal && fitAddon && searchAddon && xtermElement) {
       xtermCache.set(sessionId.value, {
         terminal,
         fitAddon,
+        searchAddon,
         element: xtermElement,
         markdownRenderer,
         onDataDisposable,
@@ -495,15 +599,25 @@ function focus() {
   terminal?.focus();
 }
 
-// Expose focus method
-defineExpose({ focus });
+// Expose focus and search methods
+defineExpose({ focus, toggleSearch });
 </script>
 
 <template>
   <div
     class="terminal-pane"
+    :class="{ searching: showSearch }"
     :style="{ backgroundColor: bgColor }"
   >
+    <SearchBar
+      :visible="showSearch"
+      :result-count="searchResultCount"
+      :result-index="searchResultIndex"
+      @search="handleSearch"
+      @next="handleSearchNext"
+      @previous="handleSearchPrevious"
+      @close="closeSearch"
+    />
     <div ref="terminalRef" class="terminal-container"></div>
   </div>
 </template>
@@ -515,11 +629,14 @@ defineExpose({ focus });
   overflow: hidden;
   padding: 4px;
   box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
 }
 
 .terminal-container {
   width: 100%;
-  height: 100%;
+  flex: 1;
+  min-height: 0;
 }
 
 .terminal-pane :deep(.xterm) {
@@ -532,5 +649,22 @@ defineExpose({ focus });
 
 .terminal-pane :deep(.xterm-screen) {
   background-color: inherit !important;
+}
+
+/* Ensure xterm decoration container renders above the text rows */
+.terminal-pane :deep(.xterm-decoration-container) {
+  z-index: 10 !important;
+  pointer-events: none;
+}
+
+/* Search result decoration styling */
+.terminal-pane :deep(.xterm-find-result-decoration) {
+  background-color: rgba(255, 217, 61, 0.15) !important;
+  outline: 1px solid rgba(138, 122, 48, 0.6) !important;
+}
+
+.terminal-pane :deep(.xterm-find-active-result-decoration) {
+  background-color: rgba(255, 217, 61, 0.3) !important;
+  outline: 1px solid #ffd93d !important;
 }
 </style>
