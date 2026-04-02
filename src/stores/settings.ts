@@ -8,6 +8,7 @@ const STORAGE_KEY = 'primarch-settings';
 
 export type AiProvider = 'none' | 'api' | 'claude' | 'codex';
 export type MarkdownRenderingMode = 'auto' | 'always' | 'never';
+export type BellStyle = 'none' | 'visual' | 'sound' | 'both';
 
 interface Settings {
   themeId: string;
@@ -19,6 +20,7 @@ interface Settings {
   anthropicApiKey: string;
   aiProvider: AiProvider;
   markdownRendering: MarkdownRenderingMode;
+  bellStyle: BellStyle;
 }
 
 export interface AccentPreset {
@@ -49,6 +51,7 @@ const defaultSettings: Settings = {
   anthropicApiKey: '',
   aiProvider: 'none',
   markdownRendering: 'auto',
+  bellStyle: 'both',
 };
 
 export const useSettingsStore = defineStore('settings', () => {
@@ -65,6 +68,7 @@ export const useSettingsStore = defineStore('settings', () => {
   const anthropicApiKey = ref(savedSettings.anthropicApiKey);
   const aiProvider = ref<AiProvider>(savedSettings.aiProvider);
   const markdownRendering = ref<MarkdownRenderingMode>(savedSettings.markdownRendering);
+  const bellStyle = ref<BellStyle>(savedSettings.bellStyle);
   const availableAiClis = ref<string[]>([]);
 
   // Apply accent color to CSS variables
@@ -194,6 +198,10 @@ export const useSettingsStore = defineStore('settings', () => {
     markdownRendering.value = mode;
   }
 
+  function setBellStyle(style: BellStyle) {
+    bellStyle.value = style;
+  }
+
   async function detectAiClis() {
     try {
       availableAiClis.value = await invoke<string[]>('detect_ai_clis');
@@ -227,11 +235,12 @@ export const useSettingsStore = defineStore('settings', () => {
     applyColorMode(false); // Default theme (Dracula) is dark
     anthropicApiKey.value = defaultSettings.anthropicApiKey;
     aiProvider.value = defaultSettings.aiProvider;
+    bellStyle.value = defaultSettings.bellStyle;
   }
 
   // Auto-save settings
   watch(
-    [themeId, fontSize, fontFamily, cursorBlink, cursorStyle, accentColor, anthropicApiKey, aiProvider, markdownRendering],
+    [themeId, fontSize, fontFamily, cursorBlink, cursorStyle, accentColor, anthropicApiKey, aiProvider, markdownRendering, bellStyle],
     () => {
       saveSettings({
         themeId: themeId.value,
@@ -243,6 +252,7 @@ export const useSettingsStore = defineStore('settings', () => {
         anthropicApiKey: anthropicApiKey.value,
         aiProvider: aiProvider.value,
         markdownRendering: markdownRendering.value,
+        bellStyle: bellStyle.value,
       });
     },
     { deep: true }
@@ -259,6 +269,7 @@ export const useSettingsStore = defineStore('settings', () => {
     anthropicApiKey,
     aiProvider,
     markdownRendering,
+    bellStyle,
     availableAiClis,
 
     // Computed
@@ -277,6 +288,7 @@ export const useSettingsStore = defineStore('settings', () => {
     setAnthropicApiKey,
     setAiProvider,
     setMarkdownRendering,
+    setBellStyle,
     detectAiClis,
     resetToDefaults,
   };

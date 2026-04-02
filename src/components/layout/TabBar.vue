@@ -88,6 +88,10 @@ function handleDragEnd() {
         @drop="handleDrop($event, tab.id)"
         @dragend="handleDragEnd"
       >
+        <span
+          v-if="layoutStore.hasBell(tab.id)"
+          class="tab-bell-dot"
+        ></span>
         <input
           v-if="editingTabId === tab.id"
           ref="editInput"
@@ -225,6 +229,20 @@ function handleDragEnd() {
 
 .tab-close:hover {
   color: var(--accent-red);
+}
+
+.tab-bell-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent-cyan);
+  flex-shrink: 0;
+  animation: bell-dot-pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes bell-dot-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
 }
 
 .tab-add {

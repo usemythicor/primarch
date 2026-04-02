@@ -22,6 +22,7 @@ import { WebLinksAddon } from '@xterm/addon-web-links';
 import { invoke } from '@tauri-apps/api/core';
 import { readText, readImage, writeText } from '@tauri-apps/plugin-clipboard-manager';
 import { openUrl } from '@tauri-apps/plugin-opener';
+import { isPermissionGranted, requestPermission, sendNotification } from '@tauri-apps/plugin-notification';
 import { useTerminal } from '../../composables/useTerminal';
 import { useSettingsStore } from '../../stores/settings';
 import { useLayoutStore } from '../../stores/layout';
@@ -137,6 +138,13 @@ watch(() => layoutStore.searchToggleSignal, () => {
   }
 });
 
+// Clear bell blink when this pane becomes active
+watch(() => layoutStore.activePane, (newActive) => {
+  if (newActive === props.nodeId && bellFlash.value) {
+    bellFlash.value = false;
+  }
+});
+
 const { createSession, startReading, reattachReading, write, resize, kill, cleanup } = useTerminal();
 
 // Check if input matches an alias and return expanded command, or null if no match
@@ -153,6 +161,117 @@ function expandAlias(input: string): string | null {
 }
 
 const bgColor = computed(() => settingsStore.currentTheme.background);
+const bellFlash = ref(false);
+
+// Process completion detection — fires ONCE when a long-running command finishes.
+// Tracks sustained output over time. When output stops, fires once and arms only
+// after the user sends new input (Enter key = new command).
+let idleTimer: ReturnType<typeof setTimeout> | null = null;
+let outputBytesInBurst = 0;
+let outputStartTime = 0;
+let commandRunning = false; // Armed when user presses Enter, disarmed after notification
+const IDLE_THRESHOLD_MS = 3000;
+const MIN_OUTPUT_FOR_NOTIFICATION = 500; // Substantial output, not just a prompt
+const MIN_DURATION_MS = 2000; // Output must have been flowing for at least 2s
+
+function isPaneActive(): boolean {
+  return document.hasFocus() && layoutStore.activePane === props.nodeId;
+}
+
+function onTerminalOutput(dataLength: number) {
+  if (!commandRunning) return; // Not armed — ignore output
+
+  if (outputBytesInBurst === 0) {
+    outputStartTime = Date.now();
+  }
+  outputBytesInBurst += dataLength;
+
+  // Reset idle timer on every output chunk
+  if (idleTimer) clearTimeout(idleTimer);
+  idleTimer = setTimeout(() => {
+    const duration = Date.now() - outputStartTime;
+    // Only fire if: enough output, ran long enough, and pane not focused
+    if (
+      outputBytesInBurst >= MIN_OUTPUT_FOR_NOTIFICATION &&
+      duration >= MIN_DURATION_MS &&
+      !isPaneActive()
+    ) {
+      handleBell();
+      commandRunning = false; // Disarm — won't fire again until next Enter
+    }
+    outputBytesInBurst = 0;
+  }, IDLE_THRESHOLD_MS);
+}
+
+function onUserInput(data: string) {
+  // Enter key arms the detector for the next command
+  if (data === '\r') {
+    commandRunning = true;
+    outputBytesInBurst = 0;
+    if (idleTimer) {
+      clearTimeout(idleTimer);
+      idleTimer = null;
+    }
+  }
+}
+
+// AudioContext singleton for bell sound
+let audioCtx: AudioContext | null = null;
+
+function playBellSound() {
+  if (!audioCtx) {
+    audioCtx = new AudioContext();
+  }
+  const osc = audioCtx.createOscillator();
+  const gain = audioCtx.createGain();
+  osc.connect(gain);
+  gain.connect(audioCtx.destination);
+  osc.frequency.value = 800;
+  osc.type = 'sine';
+  gain.gain.setValueAtTime(0.15, audioCtx.currentTime);
+  gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.15);
+  osc.start();
+  osc.stop(audioCtx.currentTime + 0.15);
+}
+
+async function handleBell() {
+  const style = settingsStore.bellStyle;
+  if (style === 'none') return;
+
+  // Visual blink — stays blinking until pane is focused
+  if (style === 'visual' || style === 'both') {
+    bellFlash.value = true;
+  }
+
+  // Audio beep
+  if (style === 'sound' || style === 'both') {
+    playBellSound();
+  }
+
+  // Notify layout store for tab indicator
+  if (props.nodeId) {
+    layoutStore.notifyBellForPane(props.nodeId);
+  }
+
+  // OS-level notification when window is not focused
+  if (!document.hasFocus()) {
+    try {
+      let permGranted = await isPermissionGranted();
+      if (!permGranted) {
+        const perm = await requestPermission();
+        permGranted = perm === 'granted';
+      }
+      if (permGranted) {
+        sendNotification({
+          title: 'Primarch',
+          body: 'A terminal needs your attention',
+        });
+      }
+    } catch {
+      // Notification not available
+    }
+  }
+}
 
 // Handle clipboard paste
 async function handlePaste() {
@@ -294,6 +413,9 @@ onMounted(async () => {
   const oscRegex = /\x1b\]7777;([^;]+);([^\x07\x1b]*)\x07/g;
 
   const onPtyData = (data: string) => {
+    // Track output for process completion detection
+    onTerminalOutput(data.length);
+
     // Check for custom OSC sequences (e.g. open-md)
     const match = oscRegex.exec(data);
     if (match) {
@@ -380,6 +502,9 @@ onMounted(async () => {
     onDataDisposable = terminal.onData(async (data) => {
       if (!sessionId.value) return;
 
+      // Track input for process completion detection (arms on Enter)
+      onUserInput(data);
+
       // Check for Enter key (carriage return)
       if (data === '\r') {
         const expanded = expandAlias(inputBuffer.trim());
@@ -432,6 +557,11 @@ onMounted(async () => {
     // Handle title changes
     terminal.onTitleChange((title) => {
       emit('title-change', title);
+    });
+
+    // Handle bell (BEL character \x07)
+    terminal.onBell(() => {
+      handleBell();
     });
 
     // Intercept paste events at capture phase before xterm handles them
@@ -622,8 +752,9 @@ defineExpose({ focus, toggleSearch });
 <template>
   <div
     class="terminal-pane"
-    :class="{ searching: showSearch }"
+    :class="{ searching: showSearch, 'bell-flash': bellFlash }"
     :style="{ backgroundColor: bgColor }"
+    @mousedown="bellFlash = false"
   >
     <SearchBar
       :visible="showSearch"
@@ -653,6 +784,19 @@ defineExpose({ focus, toggleSearch });
   width: 100%;
   flex: 1;
   min-height: 0;
+}
+
+.terminal-pane.bell-flash {
+  animation: bell-blink 1.2s ease-in-out infinite;
+}
+
+@keyframes bell-blink {
+  0%, 100% {
+    box-shadow: inset 0 0 0 2px var(--accent-cyan), inset 0 0 12px rgba(var(--accent-rgb), 0.15);
+  }
+  50% {
+    box-shadow: inset 0 0 0 2px transparent, inset 0 0 0 rgba(var(--accent-rgb), 0);
+  }
 }
 
 .terminal-pane :deep(.xterm) {

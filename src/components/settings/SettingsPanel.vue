@@ -8,6 +8,7 @@ import {
   SparklesIcon,
   PaintBrushIcon,
   ChevronRightIcon,
+  BellAlertIcon,
 } from '@heroicons/vue/24/outline';
 import { useSettingsStore, accentPresets } from '../../stores/settings';
 
@@ -27,6 +28,7 @@ const cursorStyle = computed(() => settingsStore.cursorStyle);
 const cursorBlink = computed(() => settingsStore.cursorBlink);
 const currentAccent = computed(() => settingsStore.accentColor);
 
+const bellStyle = computed(() => settingsStore.bellStyle);
 const hasKey = computed(() => !!settingsStore.anthropicApiKey);
 const aiProvider = computed(() => settingsStore.aiProvider);
 const availableAiClis = computed(() => settingsStore.availableAiClis);
@@ -296,6 +298,37 @@ function resetSettings() {
             }"
           ></span>
         </button>
+      </div>
+
+      <!-- Bell / Alert Style -->
+      <div>
+        <div class="flex items-center gap-2 mb-4">
+          <BellAlertIcon class="w-4 h-4" style="color: var(--accent-cyan);" />
+          <span class="text-header">BELL / ALERTS</span>
+        </div>
+        <div class="flex gap-2">
+          <button
+            v-for="style in ['none', 'visual', 'sound', 'both'] as const"
+            :key="style"
+            @click="settingsStore.setBellStyle(style)"
+            class="flex-1 px-4 py-2.5 transition-all duration-150 uppercase"
+            :style="{
+              background: bellStyle === style ? 'rgba(var(--accent-rgb), 0.08)' : 'var(--bg-tertiary)',
+              border: bellStyle === style ? '1px solid var(--accent-cyan)' : '1px solid var(--border-subtle)',
+              color: bellStyle === style ? 'var(--accent-cyan)' : 'var(--text-muted)',
+              fontSize: '0.65rem',
+              fontWeight: '600',
+              letterSpacing: '0.1em',
+            }"
+          >
+            {{ style }}
+          </button>
+        </div>
+        <div class="mt-2">
+          <span style="font-size: 0.6rem; color: var(--text-muted);">
+            Notifies when a program sends a bell signal (e.g. input needed, task complete).
+          </span>
+        </div>
       </div>
 
       <!-- AI / API Key -->

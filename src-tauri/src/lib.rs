@@ -376,7 +376,10 @@ fn git_push(
 ) -> Result<(), String> {
     let remote = remote.unwrap_or_else(|| "origin".to_string());
     let set_upstream = set_upstream.unwrap_or(false);
-    state.read().git_manager.push(&repo_id, &remote, set_upstream)
+    state
+        .read()
+        .git_manager
+        .push(&repo_id, &remote, set_upstream)
 }
 
 /// List remotes
@@ -544,9 +547,8 @@ fn save_clipboard_image(rgba_data: Vec<u8>, width: u32, height: u32) -> Result<S
     let file_path = temp_dir.join(&filename);
 
     // Create image from RGBA data
-    let img: ImageBuffer<Rgba<u8>, Vec<u8>> =
-        ImageBuffer::from_raw(width, height, rgba_data)
-            .ok_or_else(|| "Failed to create image from RGBA data".to_string())?;
+    let img: ImageBuffer<Rgba<u8>, Vec<u8>> = ImageBuffer::from_raw(width, height, rgba_data)
+        .ok_or_else(|| "Failed to create image from RGBA data".to_string())?;
 
     // Save as PNG
     img.save(&file_path)
@@ -736,8 +738,8 @@ fn list_directory(path: String) -> Result<Vec<DirEntry>, String> {
     };
 
     let mut entries = Vec::new();
-    let read_dir = std::fs::read_dir(&resolved)
-        .map_err(|e| format!("Failed to read directory: {}", e))?;
+    let read_dir =
+        std::fs::read_dir(&resolved).map_err(|e| format!("Failed to read directory: {}", e))?;
 
     for entry in read_dir.take(200) {
         let entry = match entry {
@@ -1026,6 +1028,7 @@ pub fn run() {
     }));
 
     tauri::Builder::default()
+        .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_updater::Builder::new().build())

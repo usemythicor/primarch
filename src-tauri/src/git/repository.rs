@@ -400,7 +400,14 @@ pub fn amend_commit(repo: &Repository, message: &str) -> Result<String, String> 
         .map_err(|e| format!("Failed to create signature: {}", e))?;
 
     let oid = head_commit
-        .amend(Some("HEAD"), Some(&sig), Some(&sig), None, Some(message), Some(&tree))
+        .amend(
+            Some("HEAD"),
+            Some(&sig),
+            Some(&sig),
+            None,
+            Some(message),
+            Some(&tree),
+        )
         .map_err(|e| format!("Failed to amend commit: {}", e))?;
 
     Ok(oid.to_string())

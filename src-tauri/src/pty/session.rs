@@ -54,8 +54,7 @@ impl TerminalSession {
 
         // Build command - inject shell integration for CWD reporting via OSC sequences
         let shell_lower = shell.to_lowercase();
-        let is_powershell =
-            shell_lower.contains("powershell") || shell_lower.contains("pwsh");
+        let is_powershell = shell_lower.contains("powershell") || shell_lower.contains("pwsh");
         let is_zsh = !is_powershell && shell_lower.contains("zsh");
         let is_bash = !is_powershell && !is_zsh && shell_lower.contains("bash");
 

@@ -107,6 +107,7 @@ export const useLayoutStore = defineStore('layout', () => {
     const tab = tabs.value.find((t) => t.id === tabId);
     if (!tab) return;
     activeTabId.value = tabId;
+    clearBell(tabId);
     const terminals = getAllTerminals(tab.layout);
     // Restore active pane for this tab, or default to first
     if (!activePane.value || !terminals.find((t) => t.id === activePane.value)) {
@@ -366,6 +367,37 @@ export const useLayoutStore = defineStore('layout', () => {
     }
   }
 
+  // Bell notification tracking — tracks which tabs have unread bell alerts
+  const bellTabs = ref<Set<string>>(new Set());
+
+  function notifyBell(tabId: string) {
+    // Only show indicator if the tab is not currently active
+    if (tabId !== activeTabId.value) {
+      bellTabs.value = new Set([...bellTabs.value, tabId]);
+    }
+  }
+
+  function notifyBellForPane(nodeId: string) {
+    // Find which tab this pane belongs to
+    for (const tab of tabs.value) {
+      const terminals = getAllTerminals(tab.layout);
+      if (terminals.some(t => t.id === nodeId)) {
+        notifyBell(tab.id);
+        return;
+      }
+    }
+  }
+
+  function clearBell(tabId: string) {
+    const newSet = new Set(bellTabs.value);
+    newSet.delete(tabId);
+    bellTabs.value = newSet;
+  }
+
+  function hasBell(tabId: string): boolean {
+    return bellTabs.value.has(tabId);
+  }
+
   // Search toggle signal — incremented to trigger watchers in active TerminalPane
   const searchToggleSignal = ref(0);
   function triggerSearchToggle() {
@@ -408,6 +440,13 @@ export const useLayoutStore = defineStore('layout', () => {
     getLayout,
     focusNextPane,
     focusPreviousPane,
+
+    // Bell notifications
+    bellTabs,
+    notifyBell,
+    notifyBellForPane,
+    clearBell,
+    hasBell,
 
     // Search
     searchToggleSignal,
