@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.1.4] - 2026-04-02
+
+### Features
+
+- **Smart bell notifications** — detect when commands finish in unfocused panes with visual border blink, audio chirp, tab dot indicator, and Windows toast notifications
+- **Bell style settings** — configurable alert modes: none, visual, sound, or both
+- **Process completion detection** — intelligent idle detection that arms on Enter and fires once when output stops, no false positives
+- **Tabs and terminal search** — draggable tabs with full-text scrollback search and regex support
+- **Markdown viewer** — resizable drawer with file browser for viewing markdown files
+
+### Fixes
+
+- **Bell spam prevention** — notifications only fire for unfocused panes and disarm after firing until next command
+
 ## [0.1.3] - 2026-03-27
 
 ### Features
