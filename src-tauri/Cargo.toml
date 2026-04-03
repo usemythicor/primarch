@@ -1,6 +1,6 @@
 [package]
 name = "primarch"
-version = "0.1.4"
+version = "0.1.5"
 description = "A workspace-aware terminal emulator"
 authors = ["casey"]
 edition = "2021"

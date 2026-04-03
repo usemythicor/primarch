@@ -113,6 +113,8 @@ export const useLayoutStore = defineStore('layout', () => {
     if (!activePane.value || !terminals.find((t) => t.id === activePane.value)) {
       activePane.value = terminals[0]?.id;
     }
+    // Signal terminals to refit (they may have been hidden)
+    tabSwitchSignal.value++;
   }
 
   function renameTab(tabId: string, name: string) {
@@ -298,20 +300,36 @@ export const useLayoutStore = defineStore('layout', () => {
     return tab ? tab.layout : createTerminalNode();
   }
 
-  // Session registry management (scoped to active tab)
+  // Find the tab that owns a given node ID
+  function findTabByNodeId(nodeId: string): Tab | undefined {
+    for (const tab of tabs.value) {
+      if (findNode(tab.layout, nodeId)) return tab;
+    }
+    return undefined;
+  }
+
+  // Session registry management (finds correct tab by nodeId)
   function registerSession(nodeId: string, sessionId: string) {
-    const tab = getActiveTab();
+    const tab = findTabByNodeId(nodeId) || getActiveTab();
     if (tab) tab.sessionRegistry.set(nodeId, sessionId);
   }
 
   function unregisterSession(nodeId: string) {
-    const tab = getActiveTab();
-    if (tab) tab.sessionRegistry.delete(nodeId);
+    // Search all tabs since the node may already be removed from layout
+    for (const tab of tabs.value) {
+      if (tab.sessionRegistry.has(nodeId)) {
+        tab.sessionRegistry.delete(nodeId);
+        return;
+      }
+    }
   }
 
   function getSessionId(nodeId: string): string | undefined {
-    const tab = getActiveTab();
-    return tab?.sessionRegistry.get(nodeId);
+    for (const tab of tabs.value) {
+      const sid = tab.sessionRegistry.get(nodeId);
+      if (sid) return sid;
+    }
+    return undefined;
   }
 
   function getAllSessionMappings(): Map<string, string> {
@@ -320,13 +338,16 @@ export const useLayoutStore = defineStore('layout', () => {
   }
 
   function isPendingReattach(ptySessionId: string): boolean {
-    const tab = getActiveTab();
-    return tab?.pendingReattach.has(ptySessionId) || false;
+    for (const tab of tabs.value) {
+      if (tab.pendingReattach.has(ptySessionId)) return true;
+    }
+    return false;
   }
 
   function clearPendingReattach(ptySessionId: string) {
-    const tab = getActiveTab();
-    if (tab) tab.pendingReattach.delete(ptySessionId);
+    for (const tab of tabs.value) {
+      tab.pendingReattach.delete(ptySessionId);
+    }
   }
 
   // Navigate between panes
@@ -398,6 +419,9 @@ export const useLayoutStore = defineStore('layout', () => {
     return bellTabs.value.has(tabId);
   }
 
+  // Tab switch signal — incremented when active tab changes so terminals can refit
+  const tabSwitchSignal = ref(0);
+
   // Search toggle signal — incremented to trigger watchers in active TerminalPane
   const searchToggleSignal = ref(0);
   function triggerSearchToggle() {
@@ -447,6 +471,9 @@ export const useLayoutStore = defineStore('layout', () => {
     notifyBellForPane,
     clearBell,
     hasBell,
+
+    // Tab switch
+    tabSwitchSignal,
 
     // Search
     searchToggleSignal,

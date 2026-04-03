@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.1.5] - 2026-04-03
+
+### Fixes
+
+- **Tab switching no longer resets terminals** — all tabs now stay mounted with live PTY sessions preserved across tab switches, fixing the bug where switching tabs killed and recreated terminal sessions
+- **Session registry works across all tabs** — session management functions now correctly find sessions in any tab, not just the active one
+- **Terminal refit on tab switch** — terminals properly resize when their tab becomes visible again
+
 ## [0.1.4] - 2026-04-02
 
 ### Features

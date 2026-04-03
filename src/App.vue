@@ -440,9 +440,17 @@ onUnmounted(async () => {
         />
       </Transition>
 
-      <!-- Terminal Panes -->
-      <div class="flex-1 min-w-0">
-        <PaneContainer :node="layoutStore.rootLayout" />
+      <!-- Terminal Panes — render ALL tabs, show only active (keeps PTY sessions alive) -->
+      <div class="flex-1 min-w-0 relative">
+        <div
+          v-for="tab in layoutStore.tabs"
+          :key="tab.id"
+          class="absolute inset-0"
+          :class="{ 'pointer-events-none': tab.id !== layoutStore.activeTabId }"
+          :style="{ visibility: tab.id === layoutStore.activeTabId ? 'visible' : 'hidden' }"
+        >
+          <PaneContainer :node="tab.layout" />
+        </div>
       </div>
 
       <!-- Markdown Viewer (right side) -->

@@ -138,6 +138,33 @@ watch(() => layoutStore.searchToggleSignal, () => {
   }
 });
 
+// Refit terminal when its tab becomes visible after a tab switch
+watch(() => layoutStore.tabSwitchSignal, () => {
+  if (!props.nodeId || !sessionId.value) return;
+
+  // Check if this pane belongs to the now-active tab by checking session registry
+  const activeTab = layoutStore.tabs.find(t => t.id === layoutStore.activeTabId);
+  if (!activeTab || !activeTab.sessionRegistry.has(props.nodeId)) return;
+
+  // Refit after the DOM has updated visibility
+  requestAnimationFrame(() => {
+    if (fitAddon && terminal && sessionId.value && terminalRef.value) {
+      const { clientWidth, clientHeight } = terminalRef.value;
+      if (clientWidth === 0 || clientHeight === 0) return;
+      try {
+        fitAddon.fit();
+        terminal.refresh(0, terminal.rows - 1);
+        const dimensions = fitAddon.proposeDimensions();
+        if (dimensions && dimensions.cols > 0 && dimensions.rows > 0) {
+          resize(sessionId.value, dimensions.cols, dimensions.rows);
+        }
+      } catch {
+        // Ignore fit errors during transition
+      }
+    }
+  });
+});
+
 // Clear bell blink when this pane becomes active
 watch(() => layoutStore.activePane, (newActive) => {
   if (newActive === props.nodeId && bellFlash.value) {
