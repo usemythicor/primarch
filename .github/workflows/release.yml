@@ -18,8 +18,8 @@ jobs:
           - platform: windows-latest
             args: ''
             name: Windows
-          - platform: macos-latest
-            args: --target aarch64-apple-darwin
+          - platform: macos-14
+            args: ''
             name: macOS
           - platform: ubuntu-22.04
             args: ''
@@ -40,7 +40,7 @@ jobs:
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
         with:
-          targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin' || '' }}
+          targets: ${{ startsWith(matrix.platform, 'macos') && 'aarch64-apple-darwin' || '' }}
 
       - name: Install dependencies (Linux)
         if: matrix.platform == 'ubuntu-22.04'
