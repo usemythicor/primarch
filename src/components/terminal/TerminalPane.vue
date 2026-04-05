@@ -197,16 +197,18 @@ let idleTimer: ReturnType<typeof setTimeout> | null = null;
 let outputBytesInBurst = 0;
 let outputStartTime = 0;
 let commandRunning = false; // Armed when user presses Enter, disarmed after notification
-const IDLE_THRESHOLD_MS = 3000;
-const MIN_OUTPUT_FOR_NOTIFICATION = 500; // Substantial output, not just a prompt
-const MIN_DURATION_MS = 2000; // Output must have been flowing for at least 2s
+let paneReady = false; // Suppress bells during shell startup
+const STARTUP_GRACE_MS = 5000;
+const IDLE_THRESHOLD_MS = 2000;
+const MIN_OUTPUT_FOR_NOTIFICATION = 1; // Any output after Enter counts
+const MIN_DURATION_MS = 0; // Notify on any completed command
 
 function isPaneActive(): boolean {
   return document.hasFocus() && layoutStore.activePane === props.nodeId;
 }
 
 function onTerminalOutput(dataLength: number) {
-  if (!commandRunning) return; // Not armed — ignore output
+  if (!commandRunning || !paneReady) return; // Not armed or still starting up
 
   if (outputBytesInBurst === 0) {
     outputStartTime = Date.now();
@@ -263,7 +265,7 @@ function playBellSound() {
 
 async function handleBell() {
   const style = settingsStore.bellStyle;
-  if (style === 'none') return;
+  if (style === 'none' || !paneReady) return;
 
   // Visual blink — stays blinking until pane is focused
   if (style === 'visual' || style === 'both') {
@@ -494,6 +496,9 @@ onMounted(async () => {
     }
 
     isConnected.value = true;
+
+    // Allow bells after startup grace period (shell prompts often emit BEL)
+    setTimeout(() => { paneReady = true; }, STARTUP_GRACE_MS);
 
     // Register session with layout store for cwd tracking
     if (props.nodeId) {

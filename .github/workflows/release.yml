@@ -96,7 +96,11 @@ jobs:
 
             **Windows:** Download and run the installer.
 
-            **macOS:** Download the `.dmg`, open it, drag to Applications. On first run, right-click → Open to bypass Gatekeeper.
+            **macOS:** Download the `.dmg`, open it, drag to Applications. On first run, Gatekeeper will block the app. The right-click → Open bypass may not work. Instead, run:
+            ```bash
+            xattr -cr /Applications/Primarch.app
+            ```
+            Then open the app normally.
 
             **Linux AppImage:**
             ```bash
