@@ -99,16 +99,60 @@ fn start_terminal_reader(
     // Spawn a thread to read from the PTY and emit events
     thread::spawn(move || {
         let mut buf = [0u8; 4096];
+        // Carries any trailing bytes that form an incomplete UTF-8 sequence
+        // across read boundaries, so multi-byte chars split by a chunk edge
+        // are reassembled instead of replaced with U+FFFD.
+        let mut pending: Vec<u8> = Vec::new();
         loop {
             match reader.lock().read(&mut buf) {
                 Ok(0) => {
-                    // EOF - terminal closed
+                    // EOF - flush anything still pending (lossily — any remaining
+                    // bytes are genuinely truncated at this point) then close.
+                    if !pending.is_empty() {
+                        let data = String::from_utf8_lossy(&pending).to_string();
+                        pending.clear();
+                        let _ = app
+                            .emit(&format!("terminal-data-{}", session_id_clone), data);
+                    }
                     let _ = app.emit(&format!("terminal-closed-{}", session_id_clone), ());
                     break;
                 }
                 Ok(n) => {
-                    // Convert to string and emit
-                    let data = String::from_utf8_lossy(&buf[..n]).to_string();
+                    pending.extend_from_slice(&buf[..n]);
+
+                    // Decode as much of `pending` as is valid UTF-8. If the tail
+                    // is an incomplete multi-byte sequence, hold it for the next
+                    // read. If there's a genuinely invalid byte mid-stream, fall
+                    // back to lossy decoding for the whole buffer so we don't
+                    // stall.
+                    let valid_up_to = match std::str::from_utf8(&pending) {
+                        Ok(_) => pending.len(),
+                        Err(e) => match e.error_len() {
+                            None => e.valid_up_to(),
+                            Some(_) => {
+                                let data = String::from_utf8_lossy(&pending).to_string();
+                                pending.clear();
+                                if let Some(cwd) = parse_osc_cwd(&data) {
+                                    session_for_cwd.set_cwd(cwd);
+                                }
+                                let _ = app.emit(
+                                    &format!("terminal-data-{}", session_id_clone),
+                                    data,
+                                );
+                                continue;
+                            }
+                        },
+                    };
+
+                    if valid_up_to == 0 {
+                        // Whole buffer is an incomplete sequence — wait for more.
+                        continue;
+                    }
+
+                    let data = std::str::from_utf8(&pending[..valid_up_to])
+                        .expect("validated above")
+                        .to_string();
+                    pending.drain(..valid_up_to);
 
                     // Parse OSC sequences for CWD updates
                     // OSC 9;9;path ST (PowerShell/ConEmu style)
