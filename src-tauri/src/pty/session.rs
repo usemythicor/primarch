@@ -28,14 +28,22 @@ impl TerminalSession {
         // Determine shell to use
         let shell = shell.unwrap_or_else(detect_default_shell);
 
-        // Determine working directory - default to user home directory
+        // Determine working directory - default to user home directory.
+        // Final fallback differs per platform so the PTY never tries to
+        // chdir into a path that doesn't exist.
         let cwd = cwd.unwrap_or_else(|| {
             dirs::home_dir()
                 .map(|p| p.to_string_lossy().to_string())
                 .unwrap_or_else(|| {
                     std::env::current_dir()
                         .map(|p| p.to_string_lossy().to_string())
-                        .unwrap_or_else(|_| "C:\\".to_string())
+                        .unwrap_or_else(|_| {
+                            if cfg!(windows) {
+                                "C:\\".to_string()
+                            } else {
+                                "/".to_string()
+                            }
+                        })
                 })
         });
 

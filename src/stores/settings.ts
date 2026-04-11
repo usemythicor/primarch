@@ -44,7 +44,7 @@ export const accentPresets: AccentPreset[] = [
 const defaultSettings: Settings = {
   themeId: 'dracula',
   fontSize: 14,
-  fontFamily: "'Cascadia Code', 'Fira Code', 'JetBrains Mono', monospace",
+  fontFamily: "'Cascadia Code', 'Fira Code', 'JetBrains Mono', 'SF Mono', Menlo, Consolas, monospace",
   cursorBlink: true,
   cursorStyle: 'block',
   accentColor: 'cyan',

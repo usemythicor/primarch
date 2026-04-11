@@ -10,8 +10,8 @@ import {
   Cog6ToothIcon,
   CommandLineIcon,
   CodeBracketIcon,
-  ArrowPathRoundedSquareIcon,
   CloudArrowUpIcon,
+  CloudArrowDownIcon,
   ArrowDownTrayIcon,
   MinusIcon,
   StopIcon,
@@ -132,6 +132,25 @@ const gitAhead = computed(() => gitStore.ahead);
 const gitBehind = computed(() => gitStore.behind);
 const gitHasRepo = computed(() => gitStore.hasRepo);
 const gitIsRemoteOperating = computed(() => gitStore.isRemoteOperating);
+const gitNeedsPublish = computed(() => gitStore.needsPublish);
+const gitShowPull = computed(() => gitHasRepo.value && gitBehind.value > 0);
+const gitShowPush = computed(
+  () => gitHasRepo.value && (gitAhead.value > 0 || gitNeedsPublish.value),
+);
+
+async function handleStatusPull() {
+  if (gitIsRemoteOperating.value) return;
+  await gitStore.pull();
+}
+
+async function handleStatusPush() {
+  if (gitIsRemoteOperating.value) return;
+  if (gitNeedsPublish.value) {
+    await gitStore.publish();
+  } else {
+    await gitStore.push();
+  }
+}
 
 function openMarkdownViewer(source: string) {
   markdownSource.value = source;
@@ -153,9 +172,12 @@ function closeModals() {
 // Keyboard shortcuts (capture phase — fires once before any pane handlers)
 function handleKeydown(e: KeyboardEvent) {
   let handled = false;
+  // Treat Cmd (macOS) and Ctrl (Windows/Linux) as the same modifier so the
+  // documented shortcut table works natively on both platforms.
+  const mod = e.ctrlKey || e.metaKey;
 
-  // Ctrl+P: Toggle command palette (backup for when global shortcut doesn't fire)
-  if (e.ctrlKey && !e.shiftKey && e.code === 'KeyP') {
+  // Cmd/Ctrl+P: Toggle command palette (backup for when global shortcut doesn't fire)
+  if (mod && !e.shiftKey && e.code === 'KeyP') {
     if (!showCommandPalette.value) {
       closeModals();
       showCommandPalette.value = true;
@@ -164,13 +186,13 @@ function handleKeydown(e: KeyboardEvent) {
     }
     handled = true;
   }
-  // Ctrl+T: New tab
-  else if (e.ctrlKey && !e.shiftKey && e.code === 'KeyT') {
+  // Cmd/Ctrl+T: New tab
+  else if (mod && !e.shiftKey && e.code === 'KeyT') {
     layoutStore.addTab();
     handled = true;
   }
-  // Ctrl+W: Close tab (when only one pane in tab) or close pane
-  else if (e.ctrlKey && !e.shiftKey && e.code === 'KeyW') {
+  // Cmd/Ctrl+W: Close tab (when only one pane in tab) or close pane
+  else if (mod && !e.shiftKey && e.code === 'KeyW') {
     if (layoutStore.activeTabTerminalCount <= 1) {
       layoutStore.closeTab(layoutStore.activeTabId);
     } else if (layoutStore.activePane) {
@@ -178,68 +200,68 @@ function handleKeydown(e: KeyboardEvent) {
     }
     handled = true;
   }
-  // Ctrl+PageDown: Next tab
-  else if (e.ctrlKey && e.code === 'PageDown') {
+  // Cmd/Ctrl+PageDown: Next tab
+  else if (mod && e.code === 'PageDown') {
     layoutStore.nextTab();
     handled = true;
   }
-  // Ctrl+PageUp: Previous tab
-  else if (e.ctrlKey && e.code === 'PageUp') {
+  // Cmd/Ctrl+PageUp: Previous tab
+  else if (mod && e.code === 'PageUp') {
     layoutStore.previousTab();
     handled = true;
   }
-  // Ctrl+1-9: Switch to tab by index
-  else if (e.ctrlKey && !e.shiftKey && e.code.match(/^Digit[1-9]$/)) {
+  // Cmd/Ctrl+1-9: Switch to tab by index
+  else if (mod && !e.shiftKey && e.code.match(/^Digit[1-9]$/)) {
     const index = parseInt(e.code.replace('Digit', '')) - 1;
     layoutStore.switchToTab(index);
     handled = true;
   }
-  // Ctrl+Shift+E: Split down (vertical split)
-  else if (e.ctrlKey && e.shiftKey && e.code === 'KeyE') {
+  // Cmd/Ctrl+Shift+E: Split down (vertical split)
+  else if (mod && e.shiftKey && e.code === 'KeyE') {
     layoutStore.splitVertical();
     handled = true;
   }
-  // Ctrl+Shift+D: Split right (horizontal split)
-  else if (e.ctrlKey && e.shiftKey && e.code === 'KeyD') {
+  // Cmd/Ctrl+Shift+D: Split right (horizontal split)
+  else if (mod && e.shiftKey && e.code === 'KeyD') {
     layoutStore.splitHorizontal();
     handled = true;
   }
-  // Ctrl+Shift+W: Close pane
-  else if (e.ctrlKey && e.shiftKey && e.code === 'KeyW') {
+  // Cmd/Ctrl+Shift+W: Close pane
+  else if (mod && e.shiftKey && e.code === 'KeyW') {
     if (layoutStore.activePane) {
       layoutStore.closePane(layoutStore.activePane);
     }
     handled = true;
   }
-  // Ctrl+Tab: Next pane
-  else if (e.ctrlKey && e.code === 'Tab' && !e.shiftKey) {
+  // Cmd/Ctrl+Tab: Next pane
+  else if (mod && e.code === 'Tab' && !e.shiftKey) {
     layoutStore.focusNextPane();
     handled = true;
   }
-  // Ctrl+Shift+Tab: Previous pane
-  else if (e.ctrlKey && e.shiftKey && e.code === 'Tab') {
+  // Cmd/Ctrl+Shift+Tab: Previous pane
+  else if (mod && e.shiftKey && e.code === 'Tab') {
     layoutStore.focusPreviousPane();
     handled = true;
   }
-  // Ctrl+Shift+S: Toggle workspace manager
-  else if (e.ctrlKey && e.shiftKey && e.code === 'KeyS') {
+  // Cmd/Ctrl+Shift+S: Toggle workspace manager
+  else if (mod && e.shiftKey && e.code === 'KeyS') {
     showSettings.value = false;
     showWorkspaceManager.value = !showWorkspaceManager.value;
     handled = true;
   }
-  // Ctrl+,: Toggle settings
-  else if (e.ctrlKey && e.code === 'Comma') {
+  // Cmd/Ctrl+,: Toggle settings
+  else if (mod && e.code === 'Comma') {
     showWorkspaceManager.value = false;
     showSettings.value = !showSettings.value;
     handled = true;
   }
-  // Ctrl+Shift+F: Toggle terminal search
-  else if (e.ctrlKey && e.shiftKey && e.code === 'KeyF') {
+  // Cmd/Ctrl+Shift+F: Toggle terminal search
+  else if (mod && e.shiftKey && e.code === 'KeyF') {
     layoutStore.triggerSearchToggle();
     handled = true;
   }
-  // Ctrl+Shift+G: Toggle git sidebar
-  else if (e.ctrlKey && e.shiftKey && e.code === 'KeyG') {
+  // Cmd/Ctrl+Shift+G: Toggle git sidebar
+  else if (mod && e.shiftKey && e.code === 'KeyG') {
     gitStore.toggleSidebar();
     handled = true;
   }
@@ -295,12 +317,13 @@ onMounted(async () => {
   // Check for updates silently on startup
   checkForUpdates(true);
 
-  // Register global shortcut for command palette (Ctrl+P)
-  // This bypasses WebView2 and works reliably on Windows
+  // Register global shortcut for command palette.
+  // CmdOrCtrl resolves to Cmd on macOS and Ctrl on Windows/Linux.
+  // This bypasses WebView2 and works reliably on Windows.
   try {
-    await register('Control+P', () => {});
+    await register('CmdOrCtrl+P', () => {});
   } catch (e) {
-    console.warn('Failed to register global shortcut Ctrl+P:', e);
+    console.warn('Failed to register global shortcut CmdOrCtrl+P:', e);
   }
 
   // Listen for global shortcut events from Rust
@@ -324,7 +347,7 @@ onUnmounted(async () => {
     globalShortcutUnlisten();
   }
   try {
-    await unregister('Control+P');
+    await unregister('CmdOrCtrl+P');
   } catch (e) {
     // Ignore errors during cleanup
   }
@@ -575,13 +598,6 @@ onUnmounted(async () => {
           <CodeBracketIcon class="w-3 h-3" style="color: var(--text-muted);" />
           <template v-if="gitHasRepo">
             <span class="text-label" style="color: var(--text-secondary);">{{ gitBranchName || 'No branch' }}</span>
-            <span v-if="gitAhead > 0 || gitBehind > 0" class="flex items-center gap-1">
-              <span v-if="gitBehind > 0" class="text-label" style="color: var(--accent-orange);">{{ gitBehind }}↓</span>
-              <span v-if="gitAhead > 0" class="flex items-center gap-0.5" style="color: var(--accent-green);">
-                <CloudArrowUpIcon class="w-3 h-3" />
-                <span class="text-label">{{ gitAhead }}</span>
-              </span>
-            </span>
             <span
               v-if="gitChangeCount > 0"
               class="px-1 rounded text-label"
@@ -589,19 +605,39 @@ onUnmounted(async () => {
             >
               {{ gitChangeCount }}
             </span>
-            <button
-              @click.stop="gitStore.sync()"
-              :disabled="gitIsRemoteOperating"
-              class="p-0.5 transition-colors hover:opacity-100"
-              :class="{ 'animate-spin': gitIsRemoteOperating }"
-              style="color: var(--text-muted);"
-              title="Sync"
-            >
-              <ArrowPathRoundedSquareIcon class="w-3 h-3" />
-            </button>
           </template>
           <span v-else class="text-label" style="color: var(--text-muted);">No Repository</span>
         </div>
+
+        <!-- Pull button: visible only when there are commits to pull -->
+        <button
+          v-if="gitShowPull"
+          @click.stop="handleStatusPull"
+          :disabled="gitIsRemoteOperating"
+          class="flex items-center gap-0.5 px-1 py-0.5 rounded transition-colors hover:bg-[var(--bg-hover)]"
+          style="color: var(--accent-orange);"
+          :title="`Pull ${gitBehind} commit${gitBehind === 1 ? '' : 's'} from remote`"
+        >
+          <CloudArrowDownIcon class="w-3 h-3" />
+          <span class="text-label">{{ gitBehind }}</span>
+        </button>
+
+        <!-- Push button: visible only when there are commits to push (or branch needs publishing) -->
+        <button
+          v-if="gitShowPush"
+          @click.stop="handleStatusPush"
+          :disabled="gitIsRemoteOperating"
+          class="flex items-center gap-0.5 px-1 py-0.5 rounded transition-colors hover:bg-[var(--bg-hover)]"
+          style="color: var(--accent-green);"
+          :title="
+            gitNeedsPublish
+              ? 'Publish branch to remote'
+              : `Push ${gitAhead} commit${gitAhead === 1 ? '' : 's'} to remote`
+          "
+        >
+          <CloudArrowUpIcon class="w-3 h-3" />
+          <span class="text-label">{{ gitNeedsPublish ? 'publish' : gitAhead }}</span>
+        </button>
       </div>
 
       <!-- Status notification (center) -->
