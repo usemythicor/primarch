@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.1.6] - 2026-04-11
+
+### Fixes
+
+- **PTY UTF-8 corruption on macOS** — multi-byte characters and ANSI escape sequences split across 4096-byte PTY read boundaries are now reassembled in a pending buffer instead of being replaced with U+FFFD; fixes garbled text, broken powerline glyphs, and mangled escape codes on macOS
+- **macOS keyboard shortcuts** — all 14 documented shortcuts (command palette, new tab, split, close, tab switching, settings, git sidebar, terminal search, etc.) now accept Cmd on macOS, not just Ctrl
+- **Global command palette shortcut on macOS** — registered as `CmdOrCtrl+P` so it resolves to Cmd on macOS and Ctrl on Windows/Linux
+- **PTY working directory fallback** — uses `/` on Unix-likes instead of hardcoded `C:\`, so terminals spawn correctly on macOS even if both home and current directory lookups fail
+- **Terminal font stack on macOS** — added SF Mono, Menlo, and Consolas as fallbacks so macOS users get a proper monospace font instead of generic `monospace`
+
+### UI
+
+- **Separate pull and push buttons in the status bar** — replaces the always-visible sync icon; a down-arrow pull button appears only when there are commits to pull, an up-arrow push button appears only when there are commits to push (or when the branch needs publishing), each with its count
+
 ## [0.1.5] - 2026-04-03
 
 ### Fixes
