@@ -107,6 +107,7 @@ export const useLayoutStore = defineStore('layout', () => {
     const tab = tabs.value.find((t) => t.id === tabId);
     if (!tab) return;
     activeTabId.value = tabId;
+    clearZoom();
     clearBell(tabId);
     const terminals = getAllTerminals(tab.layout);
     // Restore active pane for this tab, or default to first
@@ -218,6 +219,7 @@ export const useLayoutStore = defineStore('layout', () => {
   }
 
   function closePane(targetId: string) {
+    if (zoomedPaneId.value === targetId) clearZoom();
     const tab = getActiveTab();
     if (!tab) return;
 
@@ -422,6 +424,19 @@ export const useLayoutStore = defineStore('layout', () => {
   // Tab switch signal — incremented when active tab changes so terminals can refit
   const tabSwitchSignal = ref(0);
 
+  // Pane zoom — temporarily maximize a single pane
+  const zoomedPaneId = ref<string | null>(null);
+
+  function toggleZoom(nodeId?: string) {
+    const target = nodeId || activePane.value;
+    if (!target) return;
+    zoomedPaneId.value = zoomedPaneId.value === target ? null : target;
+  }
+
+  function clearZoom() {
+    zoomedPaneId.value = null;
+  }
+
   // Search toggle signal — incremented to trigger watchers in active TerminalPane
   const searchToggleSignal = ref(0);
   function triggerSearchToggle() {
@@ -474,6 +489,11 @@ export const useLayoutStore = defineStore('layout', () => {
 
     // Tab switch
     tabSwitchSignal,
+
+    // Pane zoom
+    zoomedPaneId,
+    toggleZoom,
+    clearZoom,
 
     // Search
     searchToggleSignal,

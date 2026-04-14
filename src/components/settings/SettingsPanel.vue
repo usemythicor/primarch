@@ -9,7 +9,9 @@ import {
   PaintBrushIcon,
   ChevronRightIcon,
   BellAlertIcon,
+  ComputerDesktopIcon,
 } from '@heroicons/vue/24/outline';
+import { invoke } from '@tauri-apps/api/core';
 import { useSettingsStore, accentPresets } from '../../stores/settings';
 
 const emit = defineEmits<{
@@ -17,6 +19,38 @@ const emit = defineEmits<{
 }>();
 
 const settingsStore = useSettingsStore();
+
+// Shell integration state
+const shellIntegrationInstalled = ref(false);
+const shellIntegrationLoading = ref(false);
+const isMac = navigator.platform.startsWith('Mac');
+
+async function checkShellIntegration() {
+  try {
+    shellIntegrationInstalled.value = await invoke<boolean>('is_shell_integration_installed');
+  } catch {
+    shellIntegrationInstalled.value = false;
+  }
+}
+
+async function toggleShellIntegration() {
+  shellIntegrationLoading.value = true;
+  try {
+    if (shellIntegrationInstalled.value) {
+      await invoke('uninstall_shell_integration');
+    } else {
+      await invoke('install_shell_integration');
+    }
+    await checkShellIntegration();
+  } catch (e) {
+    console.error('Shell integration error:', e);
+  } finally {
+    shellIntegrationLoading.value = false;
+  }
+}
+
+// Check on mount
+checkShellIntegration();
 
 const themes = computed(() => settingsStore.availableThemes);
 const darkThemes = computed(() => themes.value.filter(t => !t.light));
@@ -327,6 +361,67 @@ function resetSettings() {
         <div class="mt-2">
           <span style="font-size: 0.6rem; color: var(--text-muted);">
             Notifies when a program sends a bell signal (e.g. input needed, task complete).
+          </span>
+        </div>
+      </div>
+
+      <!-- Shell Integration -->
+      <div>
+        <div class="flex items-center gap-2 mb-3">
+          <ComputerDesktopIcon class="w-4 h-4" style="color: var(--accent-cyan);" />
+          <span class="text-header">SHELL INTEGRATION</span>
+        </div>
+
+        <div
+          class="flex items-center justify-between px-3 py-3"
+          style="background: var(--bg-tertiary); border: 1px solid var(--border-subtle);"
+        >
+          <div class="flex-1 min-w-0 mr-3">
+            <span class="text-label block" style="color: var(--text-secondary);">
+              "Open in Primarch" context menu
+            </span>
+            <span style="font-size: 0.6rem; color: var(--text-muted);">
+              {{ isMac
+                ? 'Adds a Finder Quick Action for folders'
+                : 'Adds a right-click option for folders in Explorer'
+              }}
+            </span>
+          </div>
+          <button
+            @click="toggleShellIntegration"
+            :disabled="shellIntegrationLoading"
+            class="px-3 py-1.5 transition-all duration-150 flex-shrink-0"
+            :style="{
+              background: shellIntegrationInstalled
+                ? 'transparent'
+                : 'rgba(var(--accent-rgb), 0.15)',
+              border: shellIntegrationInstalled
+                ? '1px solid var(--border-default)'
+                : '1px solid var(--accent-cyan)',
+              color: shellIntegrationInstalled
+                ? 'var(--text-muted)'
+                : 'var(--accent-cyan)',
+              fontSize: '0.65rem',
+              fontWeight: '600',
+              letterSpacing: '0.1em',
+              opacity: shellIntegrationLoading ? 0.5 : 1,
+            }"
+          >
+            {{ shellIntegrationLoading
+              ? 'WORKING...'
+              : shellIntegrationInstalled
+                ? 'UNINSTALL'
+                : 'INSTALL'
+            }}
+          </button>
+        </div>
+
+        <div v-if="shellIntegrationInstalled" class="mt-2">
+          <span style="font-size: 0.6rem; color: var(--text-muted);">
+            {{ isMac
+              ? 'Right-click a folder in Finder → Quick Actions → Open in Primarch.'
+              : 'Right-click a folder in Explorer → Open in Primarch. On Windows 11, this appears under "Show more options".'
+            }}
           </span>
         </div>
       </div>

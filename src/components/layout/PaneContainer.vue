@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue';
+import { ref, computed, onMounted, onUnmounted } from 'vue';
+import { invoke } from '@tauri-apps/api/core';
 import type { LayoutNode } from '../../types';
 import SplitPane from './SplitPane.vue';
 import TerminalPane from '../terminal/TerminalPane.vue';
@@ -98,6 +99,15 @@ const contextMenuItems = computed<ContextMenuItem[]>(() => {
     },
     { separator: true as const },
     {
+      label: 'Save Output',
+      action: () => exportTerminalOutput(),
+    },
+    {
+      label: layoutStore.zoomedPaneId === nodeId ? 'Unzoom Pane' : 'Zoom Pane',
+      shortcut: 'Ctrl+Shift+Z',
+      action: () => layoutStore.toggleZoom(nodeId),
+    },
+    {
       label: 'Close Pane',
       shortcut: 'Ctrl+Shift+W',
       danger: true,
@@ -105,6 +115,18 @@ const contextMenuItems = computed<ContextMenuItem[]>(() => {
     },
   ];
 });
+
+async function exportTerminalOutput() {
+  const text = terminalPaneRef.value?.getBufferText();
+  if (!text) return;
+  try {
+    const filename = `terminal-${new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)}.log`;
+    const path = await invoke<string>('export_terminal_output', { content: text, filename });
+    // Open the folder so the user can see the file
+    const { revealItemInDir } = await import('@tauri-apps/plugin-opener');
+    await revealItemInDir(path);
+  } catch { /* ignore */ }
+}
 
 function handleContextMenu(e: MouseEvent) {
   e.preventDefault();
@@ -141,6 +163,16 @@ function handleFocus() {
     layoutStore.setActivePane(props.node.id);
   }
 }
+
+// Listen for export-output events from the command palette
+function onExportEvent(e: Event) {
+  const detail = (e as CustomEvent).detail;
+  if (detail?.nodeId === props.node.id) {
+    exportTerminalOutput();
+  }
+}
+onMounted(() => window.addEventListener('primarch-export-output', onExportEvent));
+onUnmounted(() => window.removeEventListener('primarch-export-output', onExportEvent));
 </script>
 
 <template>
@@ -163,7 +195,10 @@ function handleFocus() {
   <div
     v-else-if="isTerminal"
     class="terminal-wrapper h-full w-full relative"
-    :class="{ 'pane-active': layoutStore.activePane === node.id }"
+    :class="{
+      'pane-active': layoutStore.activePane === node.id,
+      'pane-zoomed': layoutStore.zoomedPaneId === node.id,
+    }"
     :style="{ background: terminalBg }"
     @click="handleFocus"
     @focusin="handleFocus"
@@ -203,5 +238,13 @@ function handleFocus() {
   border: 1px solid color-mix(in srgb, var(--accent-cyan) 20%, transparent);
   pointer-events: none;
   z-index: 10;
+}
+
+.terminal-wrapper.pane-zoomed {
+  position: fixed !important;
+  inset: 0;
+  z-index: 45;
+  width: auto !important;
+  height: auto !important;
 }
 </style>

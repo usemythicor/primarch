@@ -28,6 +28,7 @@ import GitSidebar from './components/git/GitSidebar.vue';
 import DiffViewer from './components/git/DiffViewer.vue';
 import MarkdownViewer from './components/viewer/MarkdownViewer.vue';
 import { useLayoutStore } from './stores/layout';
+import { createTerminalNode } from './components/layout/LayoutTree';
 import { useSettingsStore } from './stores/settings';
 import { useGitStore } from './stores/git';
 import { useUpdater } from './composables/useUpdater';
@@ -59,6 +60,52 @@ async function updateMaximizedState() {
   isMaximized.value = await appWindow.isMaximized();
 }
 
+// Window state persistence
+const WINDOW_STATE_KEY = 'primarch-window-state';
+let saveWindowStateTimer: ReturnType<typeof setTimeout> | null = null;
+
+async function saveWindowState() {
+  try {
+    const maximized = await appWindow.isMaximized();
+    if (!maximized) {
+      const pos = await appWindow.outerPosition();
+      const size = await appWindow.outerSize();
+      localStorage.setItem(WINDOW_STATE_KEY, JSON.stringify({
+        x: pos.x, y: pos.y,
+        width: size.width, height: size.height,
+        maximized: false,
+      }));
+    } else {
+      // Only update the maximized flag, keep last known position/size
+      const prev = JSON.parse(localStorage.getItem(WINDOW_STATE_KEY) || '{}');
+      localStorage.setItem(WINDOW_STATE_KEY, JSON.stringify({ ...prev, maximized: true }));
+    }
+  } catch { /* ignore */ }
+}
+
+function debouncedSaveWindowState() {
+  if (saveWindowStateTimer) clearTimeout(saveWindowStateTimer);
+  saveWindowStateTimer = setTimeout(saveWindowState, 500);
+}
+
+async function restoreWindowState() {
+  try {
+    const raw = localStorage.getItem(WINDOW_STATE_KEY);
+    if (!raw) return;
+    const state = JSON.parse(raw);
+    if (state.width && state.height) {
+      const { LogicalSize, LogicalPosition } = await import('@tauri-apps/api/dpi');
+      await appWindow.setSize(new LogicalSize(state.width, state.height));
+      if (state.x != null && state.y != null) {
+        await appWindow.setPosition(new LogicalPosition(state.x, state.y));
+      }
+    }
+    if (state.maximized) {
+      await appWindow.maximize();
+    }
+  } catch { /* ignore — use defaults */ }
+}
+
 interface ShellInfo {
   id: string;
   name: string;
@@ -80,6 +127,7 @@ const appVersion = ref('0.0.0');
 let globalShortcutUnlisten: UnlistenFn | null = null;
 
 const terminalCount = computed(() => layoutStore.terminalCount);
+let openDirUnlisten: UnlistenFn | null = null;
 
 // Delayed tooltip
 const tooltipText = ref('');
@@ -260,6 +308,11 @@ function handleKeydown(e: KeyboardEvent) {
     layoutStore.triggerSearchToggle();
     handled = true;
   }
+  // Cmd/Ctrl+Shift+Z: Toggle pane zoom
+  else if (mod && e.shiftKey && e.code === 'KeyZ') {
+    layoutStore.toggleZoom();
+    handled = true;
+  }
   // Cmd/Ctrl+Shift+G: Toggle git sidebar
   else if (mod && e.shiftKey && e.code === 'KeyG') {
     gitStore.toggleSidebar();
@@ -298,6 +351,8 @@ watch(terminalBg, (bg) => {
 
 onMounted(async () => {
   window.addEventListener('keydown', handleKeydown, true);
+  // Restore saved window size/position before anything renders
+  await restoreWindowState();
   // Set initial background
   document.documentElement.style.background = terminalBg.value;
   document.body.style.background = terminalBg.value;
@@ -309,13 +364,23 @@ onMounted(async () => {
   (window as any).__openMarkdownViewer = openMarkdownViewer;
   // Start watching for CWD changes to update git
   gitStore.startCwdWatcher();
-  // Track window maximize state
+  // Track window maximize state and persist window geometry
   isMaximized.value = await appWindow.isMaximized();
-  appWindow.onResized(updateMaximizedState);
+  appWindow.onResized(() => { updateMaximizedState(); debouncedSaveWindowState(); });
+  appWindow.onMoved(debouncedSaveWindowState);
   // Get app version
   appVersion.value = await getVersion();
   // Check for updates silently on startup
   checkForUpdates(true);
+
+  // Listen for "open-directory" events from second-instance launches
+  // (Windows/Linux via single-instance plugin, macOS via Unix socket IPC).
+  openDirUnlisten = await listen<string>('open-directory', (event) => {
+    const cwd = event.payload;
+    if (cwd) {
+      layoutStore.addTab(undefined, createTerminalNode({ cwd }));
+    }
+  });
 
   // Register global shortcut for command palette.
   // CmdOrCtrl resolves to Cmd on macOS and Ctrl on Windows/Linux.
@@ -342,7 +407,10 @@ onMounted(async () => {
 onUnmounted(async () => {
   window.removeEventListener('keydown', handleKeydown, true);
   gitStore.stopCwdWatcher();
-  // Unregister global shortcut and event listener
+  // Unregister event listeners
+  if (openDirUnlisten) {
+    openDirUnlisten();
+  }
   if (globalShortcutUnlisten) {
     globalShortcutUnlisten();
   }

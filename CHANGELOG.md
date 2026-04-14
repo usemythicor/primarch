@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.1.7] - 2026-04-14
+
+### Features
+
+- **"Open in Primarch" context menu** — right-click any folder in Windows Explorer or macOS Finder to open it directly in Primarch; installs via Settings > Shell Integration
+- **Single-instance support** — launching from a context menu while Primarch is already running opens a new tab in the existing window instead of spawning a second instance (Windows uses tauri-plugin-single-instance, macOS uses Unix domain socket IPC)
+- **Pane zoom** — `Ctrl+Shift+Z` (or `Cmd+Shift+Z`) temporarily maximizes the active pane to full screen; press again to restore the split layout
+- **Session export** — right-click a terminal pane and choose "Save Output" to export the full scrollback buffer to a `.log` file in your Downloads folder, then reveal it in Explorer/Finder
+- **Window state persistence** — window size, position, and maximized state are remembered across restarts
+
+### UI
+
+- **Shell Integration settings section** — new panel in Settings with one-click install/uninstall for the OS context menu, with platform-specific instructions
+- **Zoom Pane in context menu and command palette** — available via right-click and `Ctrl+P` command palette
+- **Save Terminal Output in command palette** — export scrollback from any pane via the command palette
+
 ## [0.1.6] - 2026-04-11
 
 ### Fixes

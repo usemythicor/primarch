@@ -1,15 +1,20 @@
 mod git;
 mod pty;
+pub mod shell_integration;
 mod workspace;
 
 use git::{BranchInfo, CommitInfo, FileDiff, GitManager, GitStatus, WatcherManager};
-use parking_lot::RwLock;
+use parking_lot::{Mutex, RwLock};
 use pty::{detect_shells, PtyManager, ShellInfo};
 use std::io::Read;
 use std::sync::Arc;
 use std::thread;
-use tauri::{AppHandle, Emitter, State};
+use tauri::{AppHandle, Emitter, Manager, State};
 use workspace::{delete_workspace, list_workspaces, load_workspace, save_workspace, Workspace};
+
+/// Stores the initial --cwd from launch arguments. Consumed once by the first
+/// `create_terminal` call that does not specify its own cwd.
+struct LaunchCwd(Mutex<Option<String>>);
 
 /// Shared state for the application
 struct AppState {
@@ -18,14 +23,19 @@ struct AppState {
     watcher_manager: WatcherManager,
 }
 
-/// Create a new terminal session
+/// Create a new terminal session.
+///
+/// If no explicit `cwd` is given, the first call consumes the launch --cwd
+/// argument (if any) so the initial terminal opens at the requested directory.
 #[tauri::command]
 fn create_terminal(
     state: State<'_, Arc<RwLock<AppState>>>,
+    launch_cwd: State<'_, LaunchCwd>,
     shell: Option<String>,
     cwd: Option<String>,
 ) -> Result<String, String> {
-    state.read().pty_manager.create_session(shell, cwd)
+    let effective_cwd = cwd.or_else(|| launch_cwd.0.lock().take());
+    state.read().pty_manager.create_session(shell, effective_cwd)
 }
 
 /// Write data to a terminal session
@@ -1063,8 +1073,50 @@ async fn generate_commit_message_cli(
     Ok(message)
 }
 
+// ============ Export Commands ============
+
+/// Save terminal output text to the user's Downloads folder (or Desktop/Home fallback).
+/// Returns the full path of the saved file.
+#[tauri::command]
+fn export_terminal_output(content: String, filename: String) -> Result<String, String> {
+    let dir = dirs::download_dir()
+        .or_else(dirs::desktop_dir)
+        .or_else(dirs::home_dir)
+        .ok_or("Cannot determine save directory")?;
+
+    let path = dir.join(&filename);
+    std::fs::write(&path, &content)
+        .map_err(|e| format!("Failed to write file: {}", e))?;
+
+    Ok(path.to_string_lossy().to_string())
+}
+
+// ============ Shell Integration Commands ============
+
+/// Install OS-level "Open in Primarch" context menu entries.
+#[tauri::command]
+fn install_shell_integration() -> Result<(), String> {
+    shell_integration::platform::install()
+}
+
+/// Remove OS-level "Open in Primarch" context menu entries.
+#[tauri::command]
+fn uninstall_shell_integration() -> Result<(), String> {
+    shell_integration::platform::uninstall()
+}
+
+/// Check whether the context menu entries are currently installed.
+#[tauri::command]
+fn is_shell_integration_installed() -> bool {
+    shell_integration::platform::is_installed()
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // Parse --cwd from launch arguments (consumed by the first create_terminal).
+    let args: Vec<String> = std::env::args().collect();
+    let initial_cwd = shell_integration::parse_cwd_arg(&args);
+
     let state = Arc::new(RwLock::new(AppState {
         pty_manager: PtyManager::new(),
         git_manager: GitManager::new(),
@@ -1081,13 +1133,28 @@ pub fn run() {
             tauri_plugin_global_shortcut::Builder::new()
                 .with_handler(|app, shortcut, event| {
                     if event.state() == tauri_plugin_global_shortcut::ShortcutState::Pressed {
-                        // Emit event to frontend
                         let _ = app.emit("global-shortcut", shortcut.to_string());
                     }
                 })
                 .build(),
         )
+        // Single-instance: on Windows/Linux, forward --cwd from a second
+        // launch to the already-running window.
+        .plugin(tauri_plugin_single_instance::init(
+            |app, argv, _working_dir| {
+                if let Some(cwd) = shell_integration::parse_cwd_arg(&argv) {
+                    let _ = app.emit("open-directory", cwd);
+                }
+                // Bring the existing window to front.
+                if let Some(win) = app.get_webview_window("main") {
+                    let _ = win.unminimize();
+                    let _ = win.set_focus();
+                    let _ = win.show();
+                }
+            },
+        ))
         .manage(state)
+        .manage(LaunchCwd(Mutex::new(initial_cwd)))
         .invoke_handler(tauri::generate_handler![
             // Terminal commands
             create_terminal,
@@ -1148,17 +1215,30 @@ pub fn run() {
             // Directory commands
             list_directory,
             search_directories,
+            // Export commands
+            export_terminal_output,
+            // Shell integration commands
+            install_shell_integration,
+            uninstall_shell_integration,
+            is_shell_integration_installed,
         ])
         .setup(|_app| {
             // On Windows, disable decorations for the custom title bar.
             // macOS uses native decorations with titleBarStyle "Overlay" (set in config).
             #[cfg(target_os = "windows")]
             {
-                use tauri::Manager;
                 if let Some(window) = _app.get_webview_window("main") {
                     let _ = window.set_decorations(false);
                 }
             }
+
+            // On macOS, start the Unix-socket IPC listener so subsequent
+            // launches with --cwd are forwarded to this instance.
+            #[cfg(target_os = "macos")]
+            {
+                shell_integration::ipc::start_listener(_app.handle().clone());
+            }
+
             Ok(())
         })
         .run(tauri::generate_context!())

@@ -778,7 +778,23 @@ function focus() {
 }
 
 // Expose focus and search methods
-defineExpose({ focus, toggleSearch });
+/** Extract the full terminal scrollback buffer as plain text. */
+function getBufferText(): string {
+  if (!terminal) return '';
+  const buf = terminal.buffer.active;
+  const lines: string[] = [];
+  for (let i = 0; i < buf.length; i++) {
+    const line = buf.getLine(i);
+    if (line) lines.push(line.translateToString(true));
+  }
+  // Trim trailing empty lines
+  while (lines.length > 0 && lines[lines.length - 1].trim() === '') {
+    lines.pop();
+  }
+  return lines.join('\n');
+}
+
+defineExpose({ focus, toggleSearch, getBufferText });
 </script>
 
 <template>

@@ -21,7 +21,7 @@ import { themes } from '../../themes/presets';
 import { fuzzyMatch } from '../../utils/fuzzyMatch';
 import { getRecentDirectories, addRecentDirectory } from '../../utils/recentDirectories';
 import { getAliases, saveAlias, deleteAlias, type CommandAlias } from '../../utils/aliases';
-import { CommandLineIcon, PlusIcon, TrashIcon, DocumentTextIcon } from '@heroicons/vue/24/outline';
+import { CommandLineIcon, PlusIcon, TrashIcon, DocumentTextIcon, ArrowDownTrayIcon, ViewfinderCircleIcon } from '@heroicons/vue/24/outline';
 
 interface DirEntry {
   name: string;
@@ -183,6 +183,31 @@ const staticCommands: PaletteItem[] = [
     description: `${mod}+W`,
     icon: XMarkIcon,
     action: () => { layoutStore.closeTab(layoutStore.activeTabId); close(); },
+    score: 0,
+  },
+  {
+    id: 'zoom-pane',
+    label: 'Toggle Zoom Pane',
+    description: `${mod}+Shift+Z`,
+    icon: ViewfinderCircleIcon,
+    action: () => { layoutStore.toggleZoom(); close(); },
+    score: 0,
+  },
+  {
+    id: 'save-output',
+    label: 'Save Terminal Output',
+    description: 'Export scrollback to file',
+    icon: ArrowDownTrayIcon,
+    action: async () => {
+      close();
+      // Find the active pane's TerminalPane component via DOM and call getBufferText
+      const activeNodeId = layoutStore.activePane;
+      if (!activeNodeId) return;
+      const sessionId = layoutStore.getSessionId(activeNodeId);
+      if (!sessionId) return;
+      // Dispatch a custom event that PaneContainer can handle
+      window.dispatchEvent(new CustomEvent('primarch-export-output', { detail: { nodeId: activeNodeId } }));
+    },
     score: 0,
   },
   {
