@@ -181,11 +181,6 @@ const gitBehind = computed(() => gitStore.behind);
 const gitHasRepo = computed(() => gitStore.hasRepo);
 const gitIsRemoteOperating = computed(() => gitStore.isRemoteOperating);
 const gitNeedsPublish = computed(() => gitStore.needsPublish);
-const gitShowPull = computed(() => gitHasRepo.value && gitBehind.value > 0);
-const gitShowPush = computed(
-  () => gitHasRepo.value && (gitAhead.value > 0 || gitNeedsPublish.value),
-);
-
 async function handleStatusPull() {
   if (gitIsRemoteOperating.value) return;
   await gitStore.pull();
@@ -677,34 +672,30 @@ onUnmounted(async () => {
           <span v-else class="text-label" style="color: var(--text-muted);">No Repository</span>
         </div>
 
-        <!-- Pull button: visible only when there are commits to pull -->
+        <!-- Pull button: always visible when a repo is open -->
         <button
-          v-if="gitShowPull"
+          v-if="gitHasRepo"
           @click.stop="handleStatusPull"
           :disabled="gitIsRemoteOperating"
           class="flex items-center gap-0.5 px-1 py-0.5 rounded transition-colors hover:bg-[var(--bg-hover)]"
-          style="color: var(--accent-orange);"
-          :title="`Pull ${gitBehind} commit${gitBehind === 1 ? '' : 's'} from remote`"
+          :style="{ color: gitBehind > 0 ? 'var(--accent-orange)' : 'var(--text-muted)' }"
+          :title="gitBehind > 0 ? `Pull ${gitBehind} commit${gitBehind === 1 ? '' : 's'} from remote` : 'Pull'"
         >
           <CloudArrowDownIcon class="w-3 h-3" />
-          <span class="text-label">{{ gitBehind }}</span>
+          <span v-if="gitBehind > 0" class="text-label">{{ gitBehind }}</span>
         </button>
 
-        <!-- Push button: visible only when there are commits to push (or branch needs publishing) -->
+        <!-- Push button: always visible when a repo is open -->
         <button
-          v-if="gitShowPush"
+          v-if="gitHasRepo"
           @click.stop="handleStatusPush"
           :disabled="gitIsRemoteOperating"
           class="flex items-center gap-0.5 px-1 py-0.5 rounded transition-colors hover:bg-[var(--bg-hover)]"
-          style="color: var(--accent-green);"
-          :title="
-            gitNeedsPublish
-              ? 'Publish branch to remote'
-              : `Push ${gitAhead} commit${gitAhead === 1 ? '' : 's'} to remote`
-          "
+          :style="{ color: (gitAhead > 0 || gitNeedsPublish) ? 'var(--accent-green)' : 'var(--text-muted)' }"
+          :title="gitNeedsPublish ? 'Publish branch to remote' : gitAhead > 0 ? `Push ${gitAhead} commit${gitAhead === 1 ? '' : 's'} to remote` : 'Push'"
         >
           <CloudArrowUpIcon class="w-3 h-3" />
-          <span class="text-label">{{ gitNeedsPublish ? 'publish' : gitAhead }}</span>
+          <span v-if="gitAhead > 0 || gitNeedsPublish" class="text-label">{{ gitNeedsPublish ? 'publish' : gitAhead }}</span>
         </button>
       </div>
 
