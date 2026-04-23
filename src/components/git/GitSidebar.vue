@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { computed } from 'vue';
-import { ref } from 'vue';
+import { computed, onUnmounted } from 'vue';
+import { ref, onMounted } from 'vue';
 import {
   CodeBracketIcon,
   ArrowPathIcon,
@@ -43,6 +43,60 @@ const isRemoteOperating = computed(() => gitStore.isRemoteOperating);
 const needsPublish = computed(() => gitStore.needsPublish);
 
 const showActionsMenu = ref(false);
+const isRefreshing = ref(false);
+
+// ── Resizable width ──────────────────────────────────────────────────────────
+const WIDTH_STORAGE_KEY = 'primarch-git-sidebar-width';
+const MIN_WIDTH = 200;
+const MAX_WIDTH = 560;
+const DEFAULT_WIDTH = 280;
+
+const sidebarWidth = ref(DEFAULT_WIDTH);
+const isResizing = ref(false);
+const resizeStartX = ref(0);
+const resizeStartWidth = ref(0);
+
+onMounted(() => {
+  const saved = localStorage.getItem(WIDTH_STORAGE_KEY);
+  if (saved) {
+    const parsed = parseInt(saved, 10);
+    if (!isNaN(parsed) && parsed >= MIN_WIDTH && parsed <= MAX_WIDTH) {
+      sidebarWidth.value = parsed;
+    }
+  }
+});
+
+function startResize(e: MouseEvent) {
+  isResizing.value = true;
+  resizeStartX.value = e.clientX;
+  resizeStartWidth.value = sidebarWidth.value;
+  document.addEventListener('mousemove', onResizeMove);
+  document.addEventListener('mouseup', stopResize);
+  document.body.style.cursor = 'ew-resize';
+  document.body.style.userSelect = 'none';
+}
+
+function onResizeMove(e: MouseEvent) {
+  if (!isResizing.value) return;
+  const delta = e.clientX - resizeStartX.value;
+  sidebarWidth.value = Math.min(MAX_WIDTH, Math.max(MIN_WIDTH, resizeStartWidth.value + delta));
+}
+
+function stopResize() {
+  if (!isResizing.value) return;
+  isResizing.value = false;
+  document.removeEventListener('mousemove', onResizeMove);
+  document.removeEventListener('mouseup', stopResize);
+  document.body.style.cursor = '';
+  document.body.style.userSelect = '';
+  localStorage.setItem(WIDTH_STORAGE_KEY, sidebarWidth.value.toString());
+}
+
+onUnmounted(() => {
+  document.removeEventListener('mousemove', onResizeMove);
+  document.removeEventListener('mouseup', stopResize);
+});
+// ─────────────────────────────────────────────────────────────────────────────
 
 function toggleActionsMenu() {
   showActionsMenu.value = !showActionsMenu.value;
@@ -71,17 +125,17 @@ async function handleSync() {
   await gitStore.sync();
 }
 
-function handleRefresh() {
-  closeActionsMenu();
-  refresh();
-}
-
 function setTab(tab: 'changes' | 'history') {
   gitStore.setActiveTab(tab);
 }
 
 async function refresh() {
-  await gitStore.refreshStatus();
+  isRefreshing.value = true;
+  try {
+    await gitStore.refreshStatus();
+  } finally {
+    isRefreshing.value = false;
+  }
 }
 
 async function stageAll() {
@@ -128,7 +182,13 @@ function hideBranchSelector() {
 </script>
 
 <template>
-  <div class="git-sidebar h-full flex flex-col" style="background: var(--bg-secondary);">
+  <div
+    class="git-sidebar h-full flex flex-col"
+    :style="{ width: sidebarWidth + 'px', background: 'var(--bg-secondary)' }"
+  >
+    <!-- Right-edge resize handle -->
+    <div class="sidebar-resize-handle" @mousedown.prevent="startResize"></div>
+
     <!-- Header -->
     <div
       class="flex items-center justify-between px-3 py-2"
@@ -139,12 +199,24 @@ function hideBranchSelector() {
         <span class="text-header">SOURCE CONTROL</span>
       </div>
       <div class="flex items-center gap-1">
-        <!-- Actions dropdown -->
+        <!-- Refresh button (always visible) -->
+        <button
+          @click="refresh"
+          :disabled="isRefreshing"
+          class="btn-icon"
+          :class="{ 'spinning': isRefreshing }"
+          title="Refresh"
+        >
+          <ArrowPathIcon class="w-4 h-4" />
+        </button>
+
+        <!-- Actions dropdown (Sync + overflow) -->
         <div class="relative">
           <button
             @click="toggleActionsMenu"
             class="btn-icon"
             :class="{ 'btn-toolbar-active': showActionsMenu }"
+            title="More actions"
           >
             <ChevronDownIcon class="w-4 h-4" />
           </button>
@@ -163,38 +235,12 @@ function hideBranchSelector() {
               style="background: var(--bg-secondary); border: 1px solid var(--border-default);"
             >
               <button
-                @click="handlePull"
-                :disabled="isRemoteOperating"
-                class="git-menu-item w-full flex items-center gap-3 px-3 py-2 text-left transition-colors"
-              >
-                <CloudArrowDownIcon class="w-4 h-4 flex-shrink-0" :style="{ color: behind > 0 ? 'var(--accent-orange)' : 'var(--text-muted)' }" />
-                <span class="text-label flex-1" style="color: var(--text-secondary);">Pull</span>
-                <span v-if="behind > 0" class="text-label" style="color: var(--accent-orange);">{{ behind }}</span>
-              </button>
-              <button
-                @click="handlePush"
-                :disabled="isRemoteOperating"
-                class="git-menu-item w-full flex items-center gap-3 px-3 py-2 text-left transition-colors"
-              >
-                <CloudArrowUpIcon class="w-4 h-4 flex-shrink-0" :style="{ color: (ahead > 0 || needsPublish) ? 'var(--accent-green)' : 'var(--text-muted)' }" />
-                <span class="text-label flex-1" style="color: var(--text-secondary);">{{ needsPublish ? 'Publish Branch' : 'Push' }}</span>
-                <span v-if="ahead > 0 && !needsPublish" class="text-label" style="color: var(--accent-green);">{{ ahead }}</span>
-              </button>
-              <div class="my-1" style="border-top: 1px solid var(--border-subtle);"></div>
-              <button
                 @click="handleSync"
                 :disabled="isRemoteOperating"
                 class="git-menu-item w-full flex items-center gap-3 px-3 py-2 text-left transition-colors"
               >
                 <ArrowPathIcon class="w-4 h-4 flex-shrink-0" style="color: var(--text-muted);" />
-                <span class="text-label" style="color: var(--text-secondary);">Sync</span>
-              </button>
-              <button
-                @click="handleRefresh"
-                class="git-menu-item w-full flex items-center gap-3 px-3 py-2 text-left transition-colors"
-              >
-                <ArrowPathIcon class="w-4 h-4 flex-shrink-0" style="color: var(--text-muted);" />
-                <span class="text-label" style="color: var(--text-secondary);">Refresh</span>
+                <span class="text-label" style="color: var(--text-secondary);">Sync (Pull + Push)</span>
               </button>
             </div>
           </Transition>
@@ -427,6 +473,51 @@ function hideBranchSelector() {
     <!-- Commit Panel (only on changes tab) -->
     <CommitPanel v-if="hasRepo && activeTab === 'changes'" />
 
+    <!-- Pull / Push bottom bar (always visible when repo is open) -->
+    <div
+      v-if="hasRepo"
+      class="git-remote-bar flex items-stretch"
+      style="border-top: 1px solid var(--border-subtle); flex-shrink: 0;"
+    >
+      <button
+        @click="handlePull"
+        :disabled="isRemoteOperating"
+        class="remote-btn flex-1 flex items-center justify-center gap-1.5 py-2"
+        title="Pull"
+      >
+        <CloudArrowDownIcon
+          class="w-3.5 h-3.5 flex-shrink-0"
+          :style="{ color: behind > 0 ? 'var(--accent-orange)' : 'currentColor' }"
+        />
+        <span class="text-label">Pull</span>
+        <span
+          v-if="behind > 0"
+          class="text-label"
+          style="color: var(--accent-orange);"
+        >{{ behind }}</span>
+      </button>
+
+      <div style="width: 1px; background: var(--border-subtle); flex-shrink: 0;"></div>
+
+      <button
+        @click="handlePush"
+        :disabled="isRemoteOperating"
+        class="remote-btn flex-1 flex items-center justify-center gap-1.5 py-2"
+        :title="needsPublish ? 'Publish Branch' : 'Push'"
+      >
+        <CloudArrowUpIcon
+          class="w-3.5 h-3.5 flex-shrink-0"
+          :style="{ color: (ahead > 0 || needsPublish) ? 'var(--accent-green)' : 'currentColor' }"
+        />
+        <span class="text-label">{{ needsPublish ? 'Publish' : 'Push' }}</span>
+        <span
+          v-if="ahead > 0 && !needsPublish"
+          class="text-label"
+          style="color: var(--accent-green);"
+        >{{ ahead }}</span>
+      </button>
+    </div>
+
     <!-- Branch Selector Modal -->
     <BranchSelector
       v-if="branchSelectorVisible"
@@ -438,10 +529,28 @@ function hideBranchSelector() {
 
 <style scoped>
 .git-sidebar {
-  width: 280px;
+  position: relative;
   min-width: 200px;
-  max-width: 400px;
+  max-width: 560px;
   border-right: 1px solid var(--border-default);
+}
+
+/* Right-edge drag handle */
+.sidebar-resize-handle {
+  position: absolute;
+  top: 0;
+  right: -2px;
+  width: 4px;
+  height: 100%;
+  cursor: ew-resize;
+  background: transparent;
+  z-index: 10;
+  transition: background 0.15s ease;
+}
+
+.sidebar-resize-handle:hover,
+.sidebar-resize-handle:active {
+  background: var(--accent-cyan);
 }
 
 .untracked-item:hover {
@@ -460,5 +569,33 @@ function hideBranchSelector() {
 .git-menu-item:disabled {
   opacity: 0.4;
   cursor: not-allowed;
+}
+
+/* Pull / Push bottom bar */
+.remote-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.remote-btn:hover:not(:disabled) {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.remote-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* Spin animation for refresh button */
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.spinning svg {
+  animation: spin 0.8s linear infinite;
 }
 </style>
