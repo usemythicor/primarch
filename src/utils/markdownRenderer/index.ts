@@ -4,7 +4,7 @@ import { createSessionState, processBuffer, flushBuffer } from './buffer';
 import { containsMarkdown } from './parser';
 import { createAnsiTheme, renderMarkdown, preserveAnsi, restoreAnsi } from './renderer';
 
-const DEFAULT_TRIGGER_COMMANDS = ['claude', 'glow', 'mdcat', 'bat', 'rich'];
+const DEFAULT_TRIGGER_COMMANDS = ['glow', 'mdcat', 'bat', 'rich'];
 
 // Regex to detect cursor control / TUI escape sequences
 const TUI_SEQUENCE_RE = /\x1b\[[\d;]*[ABCDEFGHJKLMPSTXdfr]|\x1b\[[\d;]*[su]|\x1b\[\?\d+[hl]/;
@@ -83,14 +83,8 @@ export class MarkdownRenderer {
    * Process a chunk of terminal output
    */
   process(chunk: string): string {
-    // Clear any pending flush timeout
-    if (this.flushTimeout) {
-      clearTimeout(this.flushTimeout);
-      this.flushTimeout = null;
-    }
-
     // Pass through real-time status updates (carriage returns without newlines)
-    // These are used by CLIs like claude for spinner animations and progress updates
+    // These are used by CLIs for spinner animations and progress updates
     if (chunk.includes('\r') && !chunk.includes('\n')) {
       return chunk;
     }
@@ -99,7 +93,19 @@ export class MarkdownRenderer {
     // Matches: cursor movement/position (A-H,f,d), erase (J,K,X), insert/delete (L,M,P),
     // scroll (S,T), scrolling region (r), save/restore cursor (s,u), DEC private modes (?...h/l)
     if (TUI_SEQUENCE_RE.test(chunk)) {
-      // A TUI app is running — disable markdown rendering for the rest of this command
+      // A TUI app is running — flush any buffered content before switching to passthrough,
+      // then disable markdown rendering for the rest of this command.
+      if (this.flushTimeout) {
+        clearTimeout(this.flushTimeout);
+        this.flushTimeout = null;
+      }
+      if (this.state.buffer.length > 0) {
+        const { output: flushed, state: flushedState } = flushBuffer(this.state);
+        this.state = flushedState;
+        if (flushed && this.onFlush) {
+          this.onFlush(this.renderChunk(flushed));
+        }
+      }
       this.tuiMode = true;
       this.state.enabled = false;
       return chunk;
@@ -108,6 +114,12 @@ export class MarkdownRenderer {
     // TUI mode: pass everything through regardless of triggers or heuristics
     if (this.tuiMode) {
       return chunk;
+    }
+
+    // Clear any pending flush timeout now that we know we're processing markdown
+    if (this.flushTimeout) {
+      clearTimeout(this.flushTimeout);
+      this.flushTimeout = null;
     }
 
     // If markdown rendering is disabled or not active, pass through
