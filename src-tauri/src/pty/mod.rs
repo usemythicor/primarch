@@ -25,8 +25,9 @@ impl PtyManager {
         &self,
         shell: Option<String>,
         cwd: Option<String>,
+        timestamp_prompt: bool,
     ) -> Result<String, String> {
-        let session = TerminalSession::new(shell, cwd)?;
+        let session = TerminalSession::new(shell, cwd, timestamp_prompt)?;
         let id = session.id.clone();
         self.sessions.write().insert(id.clone(), session);
         Ok(id)

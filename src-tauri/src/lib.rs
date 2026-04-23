@@ -33,9 +33,10 @@ fn create_terminal(
     launch_cwd: State<'_, LaunchCwd>,
     shell: Option<String>,
     cwd: Option<String>,
+    timestamp_prompt: Option<bool>,
 ) -> Result<String, String> {
     let effective_cwd = cwd.or_else(|| launch_cwd.0.lock().take());
-    state.read().pty_manager.create_session(shell, effective_cwd)
+    state.read().pty_manager.create_session(shell, effective_cwd, timestamp_prompt.unwrap_or(false))
 }
 
 /// Write data to a terminal session

@@ -22,7 +22,7 @@ pub struct TerminalSession {
 
 impl TerminalSession {
     /// Create a new terminal session
-    pub fn new(shell: Option<String>, cwd: Option<String>) -> Result<Self, String> {
+    pub fn new(shell: Option<String>, cwd: Option<String>, timestamp_prompt: bool) -> Result<Self, String> {
         let id = uuid::Uuid::new_v4().to_string();
 
         // Determine shell to use
@@ -72,7 +72,11 @@ impl TerminalSession {
             c.arg("-Command");
             // Define a prompt function that emits OSC 9;9 with current directory
             // OSC 9;9;path ST where ST is ESC \ (0x1b 0x5c)
-            c.arg(r#"function prompt { $p = $executionContext.SessionState.Path.CurrentLocation.Path; $e = [char]27; "$e]9;9;$p$e\PS $p> " }"#);
+            if timestamp_prompt {
+                c.arg(r#"function prompt { $p = $executionContext.SessionState.Path.CurrentLocation.Path; $e = [char]27; $t = Get-Date -Format 'hh:mmtt'; $leaf = Split-Path -Leaf $p; "$e]9;9;$p$e\[$t] $env:USERNAME@$env:COMPUTERNAME $leaf> " }"#);
+            } else {
+                c.arg(r#"function prompt { $p = $executionContext.SessionState.Path.CurrentLocation.Path; $e = [char]27; "$e]9;9;$p$e\PS $p> " }"#);
+            }
             c
         } else if is_zsh {
             let mut c = CommandBuilder::new(&shell);
@@ -83,7 +87,7 @@ impl TerminalSession {
             // 2. Adds a precmd hook to emit OSC 7 with the current directory
             let zdotdir = std::env::temp_dir().join("primarch-zsh-init");
             let _ = std::fs::create_dir_all(&zdotdir);
-            let zshenv = r#"# Primarch shell integration
+            let zshenv_base = r#"# Primarch shell integration
 if [[ -n "$PRIMARCH_ORIG_ZDOTDIR" ]]; then
     ZDOTDIR="$PRIMARCH_ORIG_ZDOTDIR"
 else
@@ -91,9 +95,17 @@ else
 fi
 unset PRIMARCH_ORIG_ZDOTDIR
 [[ -f "$ZDOTDIR/.zshenv" ]] && source "$ZDOTDIR/.zshenv"
-__primarch_precmd() { printf '\e]7;file://%s%s\e\\' "$HOST" "$PWD" }
-precmd_functions+=(__primarch_precmd)
 "#;
+            let zshenv_precmd = if timestamp_prompt {
+                r#"__primarch_precmd() { printf '\e]7;file://%s%s\e\\' "$HOST" "$PWD"; PROMPT='[%D{%H:%M}] %n@%m %1~ > ' }
+precmd_functions+=(__primarch_precmd)
+"#
+            } else {
+                r#"__primarch_precmd() { printf '\e]7;file://%s%s\e\\' "$HOST" "$PWD" }
+precmd_functions+=(__primarch_precmd)
+"#
+            };
+            let zshenv = format!("{}{}", zshenv_base, zshenv_precmd);
             let _ = std::fs::write(zdotdir.join(".zshenv"), zshenv);
 
             let orig_zdotdir = std::env::var("ZDOTDIR").unwrap_or_default();
@@ -103,11 +115,20 @@ precmd_functions+=(__primarch_precmd)
             c
         } else if is_bash {
             let mut c = CommandBuilder::new(&shell);
-            // Set PROMPT_COMMAND to emit OSC 7 with current directory
-            c.env(
-                "PROMPT_COMMAND",
-                r#"printf '\e]7;file://%s%s\e\\' "$HOSTNAME" "$PWD""#,
-            );
+            // Set PROMPT_COMMAND to emit OSC 7 with current directory.
+            // When timestamp prompts are on, also reset PS1 each time so it
+            // overrides whatever .bashrc may have set.
+            if timestamp_prompt {
+                c.env(
+                    "PROMPT_COMMAND",
+                    r#"printf '\e]7;file://%s%s\e\\' "$HOSTNAME" "$PWD"; PS1='[\D{%H:%M}] \u@\h \W > '"#,
+                );
+            } else {
+                c.env(
+                    "PROMPT_COMMAND",
+                    r#"printf '\e]7;file://%s%s\e\\' "$HOSTNAME" "$PWD""#,
+                );
+            }
             c
         } else {
             CommandBuilder::new(&shell)

@@ -334,6 +334,32 @@ function resetSettings() {
         </button>
       </div>
 
+      <!-- Prompt Timestamps -->
+      <div class="flex items-center justify-between">
+        <div>
+          <span class="text-header block">PROMPT TIMESTAMPS</span>
+          <span style="font-size: 0.6rem; color: var(--text-muted);">
+            Shows [HH:MM] before each prompt. Opens a new terminal to take effect.
+          </span>
+        </div>
+        <button
+          @click="settingsStore.setTimestampPrompt(!settingsStore.timestampPrompt)"
+          class="relative w-12 h-6 transition-all duration-200 flex-shrink-0 ml-4"
+          :style="{
+            background: settingsStore.timestampPrompt ? 'rgba(var(--accent-rgb), 0.2)' : 'var(--bg-tertiary)',
+            border: settingsStore.timestampPrompt ? '1px solid var(--accent-cyan)' : '1px solid var(--border-default)',
+          }"
+        >
+          <span
+            class="absolute top-1 w-4 h-4 transition-all duration-200"
+            :style="{
+              left: settingsStore.timestampPrompt ? '26px' : '2px',
+              background: settingsStore.timestampPrompt ? 'var(--accent-cyan)' : 'var(--text-muted)',
+            }"
+          ></span>
+        </button>
+      </div>
+
       <!-- Bell / Alert Style -->
       <div>
         <div class="flex items-center gap-2 mb-4">

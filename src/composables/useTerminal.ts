@@ -10,8 +10,8 @@ export function useTerminal() {
   /**
    * Create a new terminal session
    */
-  async function createSession(shell?: string, cwd?: string): Promise<string> {
-    const sessionId = await invoke<string>('create_terminal', { shell, cwd });
+  async function createSession(shell?: string, cwd?: string, timestampPrompt?: boolean): Promise<string> {
+    const sessionId = await invoke<string>('create_terminal', { shell, cwd, timestampPrompt });
 
     sessions.value.set(sessionId, {
       id: sessionId,

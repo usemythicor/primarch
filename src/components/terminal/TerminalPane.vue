@@ -491,7 +491,7 @@ onMounted(async () => {
       }
     } else {
       // Create a fresh PTY session
-      sessionId.value = await createSession(props.shell, props.cwd);
+      sessionId.value = await createSession(props.shell, props.cwd, settingsStore.timestampPrompt);
       await startReading(sessionId.value, onPtyData, onPtyClose, onPtyError);
     }
 

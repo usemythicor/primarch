@@ -21,6 +21,7 @@ interface Settings {
   aiProvider: AiProvider;
   markdownRendering: MarkdownRenderingMode;
   bellStyle: BellStyle;
+  timestampPrompt: boolean;
 }
 
 export interface AccentPreset {
@@ -52,6 +53,7 @@ const defaultSettings: Settings = {
   aiProvider: 'none',
   markdownRendering: 'auto',
   bellStyle: 'both',
+  timestampPrompt: false,
 };
 
 export const useSettingsStore = defineStore('settings', () => {
@@ -69,6 +71,7 @@ export const useSettingsStore = defineStore('settings', () => {
   const aiProvider = ref<AiProvider>(savedSettings.aiProvider);
   const markdownRendering = ref<MarkdownRenderingMode>(savedSettings.markdownRendering);
   const bellStyle = ref<BellStyle>(savedSettings.bellStyle);
+  const timestampPrompt = ref(savedSettings.timestampPrompt);
   const availableAiClis = ref<string[]>([]);
 
   // Apply accent color to CSS variables
@@ -202,6 +205,10 @@ export const useSettingsStore = defineStore('settings', () => {
     bellStyle.value = style;
   }
 
+  function setTimestampPrompt(enabled: boolean) {
+    timestampPrompt.value = enabled;
+  }
+
   async function detectAiClis() {
     try {
       availableAiClis.value = await invoke<string[]>('detect_ai_clis');
@@ -240,7 +247,7 @@ export const useSettingsStore = defineStore('settings', () => {
 
   // Auto-save settings
   watch(
-    [themeId, fontSize, fontFamily, cursorBlink, cursorStyle, accentColor, anthropicApiKey, aiProvider, markdownRendering, bellStyle],
+    [themeId, fontSize, fontFamily, cursorBlink, cursorStyle, accentColor, anthropicApiKey, aiProvider, markdownRendering, bellStyle, timestampPrompt],
     () => {
       saveSettings({
         themeId: themeId.value,
@@ -253,6 +260,7 @@ export const useSettingsStore = defineStore('settings', () => {
         aiProvider: aiProvider.value,
         markdownRendering: markdownRendering.value,
         bellStyle: bellStyle.value,
+        timestampPrompt: timestampPrompt.value,
       });
     },
     { deep: true }
@@ -270,6 +278,7 @@ export const useSettingsStore = defineStore('settings', () => {
     aiProvider,
     markdownRendering,
     bellStyle,
+    timestampPrompt,
     availableAiClis,
 
     // Computed
@@ -289,6 +298,7 @@ export const useSettingsStore = defineStore('settings', () => {
     setAiProvider,
     setMarkdownRendering,
     setBellStyle,
+    setTimestampPrompt,
     detectAiClis,
     resetToDefaults,
   };
