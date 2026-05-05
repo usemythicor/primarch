@@ -201,7 +201,7 @@ let paneReady = false; // Suppress bells during shell startup
 const STARTUP_GRACE_MS = 5000;
 const IDLE_THRESHOLD_MS = 2000;
 const MIN_OUTPUT_FOR_NOTIFICATION = 1; // Any output after Enter counts
-const MIN_DURATION_MS = 0; // Notify on any completed command
+const MIN_DURATION_MS = 10000; // Only notify for commands that run 10+ seconds
 
 function isPaneActive(): boolean {
   return document.hasFocus() && layoutStore.activePane === props.nodeId;

@@ -605,10 +605,15 @@ function handleKeydown(e: KeyboardEvent) {
     if (mode.value === 'create-alias') {
       handleCreateAliasSubmit();
     } else if (mode.value === 'markdown') {
-      const source = query.value.trim();
-      if (source) {
-        emit('openMarkdown', source);
-        close();
+      const item = filteredItems.value[selectedIndex.value];
+      if (item) {
+        item.action();
+      } else {
+        const source = query.value.trim();
+        if (source) {
+          emit('openMarkdown', source);
+          close();
+        }
       }
     } else {
       const item = filteredItems.value[selectedIndex.value];

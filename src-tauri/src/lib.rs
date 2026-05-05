@@ -1134,7 +1134,13 @@ pub fn run() {
             tauri_plugin_global_shortcut::Builder::new()
                 .with_handler(|app, shortcut, event| {
                     if event.state() == tauri_plugin_global_shortcut::ShortcutState::Pressed {
-                        let _ = app.emit("global-shortcut", shortcut.to_string());
+                        // Only emit when our window is focused so we don't steal
+                        // the shortcut from other applications.
+                        if let Some(w) = app.get_webview_window("main") {
+                            if w.is_focused().unwrap_or(false) {
+                                let _ = app.emit("global-shortcut", shortcut.to_string());
+                            }
+                        }
                     }
                 })
                 .build(),
