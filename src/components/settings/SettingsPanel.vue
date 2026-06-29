@@ -360,6 +360,101 @@ function resetSettings() {
         </button>
       </div>
 
+      <!-- Dim Inactive Panes -->
+      <div class="flex items-center justify-between">
+        <div>
+          <span class="text-header block">DIM INACTIVE PANES</span>
+          <span style="font-size: 0.6rem; color: var(--text-muted);">
+            Fades unfocused panes so the active one stands out.
+          </span>
+        </div>
+        <button
+          @click="settingsStore.setDimInactivePanes(!settingsStore.dimInactivePanes)"
+          class="relative w-12 h-6 transition-all duration-200 flex-shrink-0 ml-4"
+          :style="{
+            background: settingsStore.dimInactivePanes ? 'rgba(var(--accent-rgb), 0.2)' : 'var(--bg-tertiary)',
+            border: settingsStore.dimInactivePanes ? '1px solid var(--accent-cyan)' : '1px solid var(--border-default)',
+          }"
+        >
+          <span
+            class="absolute top-1 w-4 h-4 transition-all duration-200"
+            :style="{
+              left: settingsStore.dimInactivePanes ? '26px' : '2px',
+              background: settingsStore.dimInactivePanes ? 'var(--accent-cyan)' : 'var(--text-muted)',
+            }"
+          ></span>
+        </button>
+      </div>
+
+      <!-- Pane Header -->
+      <div class="flex items-center justify-between">
+        <div>
+          <span class="text-header block">PANE HEADER</span>
+          <span style="font-size: 0.6rem; color: var(--text-muted);">
+            Shows a thin bar on each pane with its directory and running process.
+          </span>
+        </div>
+        <button
+          @click="settingsStore.setShowPaneHeader(!settingsStore.showPaneHeader)"
+          class="relative w-12 h-6 transition-all duration-200 flex-shrink-0 ml-4"
+          :style="{
+            background: settingsStore.showPaneHeader ? 'rgba(var(--accent-rgb), 0.2)' : 'var(--bg-tertiary)',
+            border: settingsStore.showPaneHeader ? '1px solid var(--accent-cyan)' : '1px solid var(--border-default)',
+          }"
+        >
+          <span
+            class="absolute top-1 w-4 h-4 transition-all duration-200"
+            :style="{
+              left: settingsStore.showPaneHeader ? '26px' : '2px',
+              background: settingsStore.showPaneHeader ? 'var(--accent-cyan)' : 'var(--text-muted)',
+            }"
+          ></span>
+        </button>
+      </div>
+
+      <!-- Notify When Command Finishes -->
+      <div class="flex items-center justify-between">
+        <div>
+          <span class="text-header block">COMMAND-FINISH ALERTS</span>
+          <span style="font-size: 0.6rem; color: var(--text-muted);">
+            Desktop notification when a long command finishes in an unfocused pane.
+          </span>
+        </div>
+        <button
+          @click="settingsStore.setNotifyCommandFinish(!settingsStore.notifyCommandFinish)"
+          class="relative w-12 h-6 transition-all duration-200 flex-shrink-0 ml-4"
+          :style="{
+            background: settingsStore.notifyCommandFinish ? 'rgba(var(--accent-rgb), 0.2)' : 'var(--bg-tertiary)',
+            border: settingsStore.notifyCommandFinish ? '1px solid var(--accent-cyan)' : '1px solid var(--border-default)',
+          }"
+        >
+          <span
+            class="absolute top-1 w-4 h-4 transition-all duration-200"
+            :style="{
+              left: settingsStore.notifyCommandFinish ? '26px' : '2px',
+              background: settingsStore.notifyCommandFinish ? 'var(--accent-cyan)' : 'var(--text-muted)',
+            }"
+          ></span>
+        </button>
+      </div>
+
+      <!-- Window Opacity -->
+      <div>
+        <div class="flex items-center justify-between mb-2">
+          <span class="text-header block">WINDOW OPACITY</span>
+          <span style="font-size: 0.7rem; color: var(--text-secondary); font-weight: 600;">{{ settingsStore.windowOpacity }}%</span>
+        </div>
+        <input
+          type="range"
+          min="50"
+          max="100"
+          step="1"
+          :value="settingsStore.windowOpacity"
+          @input="settingsStore.setWindowOpacity(+($event.target as HTMLInputElement).value)"
+          class="w-full accent-[var(--accent-cyan)]"
+        />
+      </div>
+
       <!-- Bell / Alert Style -->
       <div>
         <div class="flex items-center gap-2 mb-4">

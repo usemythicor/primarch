@@ -22,6 +22,10 @@ interface Settings {
   markdownRendering: MarkdownRenderingMode;
   bellStyle: BellStyle;
   timestampPrompt: boolean;
+  dimInactivePanes: boolean;
+  showPaneHeader: boolean;
+  notifyCommandFinish: boolean;
+  windowOpacity: number;
 }
 
 export interface AccentPreset {
@@ -54,6 +58,10 @@ const defaultSettings: Settings = {
   markdownRendering: 'auto',
   bellStyle: 'both',
   timestampPrompt: false,
+  dimInactivePanes: true,
+  showPaneHeader: false,
+  notifyCommandFinish: true,
+  windowOpacity: 100,
 };
 
 export const useSettingsStore = defineStore('settings', () => {
@@ -72,6 +80,10 @@ export const useSettingsStore = defineStore('settings', () => {
   const markdownRendering = ref<MarkdownRenderingMode>(savedSettings.markdownRendering);
   const bellStyle = ref<BellStyle>(savedSettings.bellStyle);
   const timestampPrompt = ref(savedSettings.timestampPrompt);
+  const dimInactivePanes = ref(savedSettings.dimInactivePanes);
+  const showPaneHeader = ref(savedSettings.showPaneHeader);
+  const notifyCommandFinish = ref(savedSettings.notifyCommandFinish);
+  const windowOpacity = ref(savedSettings.windowOpacity);
   const availableAiClis = ref<string[]>([]);
 
   // Apply accent color to CSS variables
@@ -209,6 +221,22 @@ export const useSettingsStore = defineStore('settings', () => {
     timestampPrompt.value = enabled;
   }
 
+  function setDimInactivePanes(enabled: boolean) {
+    dimInactivePanes.value = enabled;
+  }
+
+  function setShowPaneHeader(enabled: boolean) {
+    showPaneHeader.value = enabled;
+  }
+
+  function setNotifyCommandFinish(enabled: boolean) {
+    notifyCommandFinish.value = enabled;
+  }
+
+  function setWindowOpacity(value: number) {
+    windowOpacity.value = Math.max(50, Math.min(100, Math.round(value)));
+  }
+
   async function detectAiClis() {
     try {
       availableAiClis.value = await invoke<string[]>('detect_ai_clis');
@@ -247,7 +275,7 @@ export const useSettingsStore = defineStore('settings', () => {
 
   // Auto-save settings
   watch(
-    [themeId, fontSize, fontFamily, cursorBlink, cursorStyle, accentColor, anthropicApiKey, aiProvider, markdownRendering, bellStyle, timestampPrompt],
+    [themeId, fontSize, fontFamily, cursorBlink, cursorStyle, accentColor, anthropicApiKey, aiProvider, markdownRendering, bellStyle, timestampPrompt, dimInactivePanes, showPaneHeader, notifyCommandFinish, windowOpacity],
     () => {
       saveSettings({
         themeId: themeId.value,
@@ -261,6 +289,10 @@ export const useSettingsStore = defineStore('settings', () => {
         markdownRendering: markdownRendering.value,
         bellStyle: bellStyle.value,
         timestampPrompt: timestampPrompt.value,
+        dimInactivePanes: dimInactivePanes.value,
+        showPaneHeader: showPaneHeader.value,
+        notifyCommandFinish: notifyCommandFinish.value,
+        windowOpacity: windowOpacity.value,
       });
     },
     { deep: true }
@@ -279,6 +311,10 @@ export const useSettingsStore = defineStore('settings', () => {
     markdownRendering,
     bellStyle,
     timestampPrompt,
+    dimInactivePanes,
+    showPaneHeader,
+    notifyCommandFinish,
+    windowOpacity,
     availableAiClis,
 
     // Computed
@@ -299,6 +335,10 @@ export const useSettingsStore = defineStore('settings', () => {
     setMarkdownRendering,
     setBellStyle,
     setTimestampPrompt,
+    setDimInactivePanes,
+    setShowPaneHeader,
+    setNotifyCommandFinish,
+    setWindowOpacity,
     detectAiClis,
     resetToDefaults,
   };

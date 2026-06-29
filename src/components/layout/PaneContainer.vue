@@ -199,6 +199,7 @@ onUnmounted(() => window.removeEventListener('primarch-export-output', onExportE
     :class="{
       'pane-active': layoutStore.activePane === node.id,
       'pane-zoomed': layoutStore.zoomedPaneId === node.id,
+      'pane-dim': settingsStore.dimInactivePanes,
     }"
     :style="{ background: terminalBg }"
     @click="handleFocus"
@@ -230,6 +231,13 @@ onUnmounted(() => window.removeEventListener('primarch-export-output', onExportE
 <style scoped>
 .terminal-wrapper {
   outline: none;
+}
+
+/* Dim panes that aren't focused so the active one stands out. The sole pane in
+   a tab is always active, so single-pane tabs are never dimmed. */
+.terminal-wrapper.pane-dim:not(.pane-active) {
+  opacity: 0.55;
+  transition: opacity 0.15s ease;
 }
 
 .terminal-wrapper.pane-active::after {
