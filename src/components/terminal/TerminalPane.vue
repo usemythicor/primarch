@@ -204,6 +204,8 @@ let idleTimer: ReturnType<typeof setTimeout> | null = null;
 let outputBytesInBurst = 0;
 let outputStartTime = 0;
 let commandRunning = false; // Armed when user presses Enter, disarmed after notification
+let lastCommand = ''; // The command text captured when the detector arms
+let commandArmTime = 0; // Timestamp (ms) the command was submitted
 let paneReady = false; // Suppress bells during shell startup
 const STARTUP_GRACE_MS = 5000;
 const IDLE_THRESHOLD_MS = 2000;
@@ -232,7 +234,7 @@ function onTerminalOutput(dataLength: number) {
       duration >= MIN_DURATION_MS &&
       !isPaneActive()
     ) {
-      handleBell();
+      notifyCommandFinished(lastCommand, Date.now() - commandArmTime);
       commandRunning = false; // Disarm — won't fire again until next Enter
     }
     outputBytesInBurst = 0;
@@ -243,6 +245,8 @@ function onUserInput(data: string) {
   // Enter key arms the detector for the next command
   if (data === '\r') {
     commandRunning = true;
+    lastCommand = inputBuffer.trim();
+    commandArmTime = Date.now();
     outputBytesInBurst = 0;
     if (idleTimer) {
       clearTimeout(idleTimer);
@@ -270,43 +274,59 @@ function playBellSound() {
   osc.stop(audioCtx.currentTime + 0.15);
 }
 
-async function handleBell() {
+// Visual blink, audio beep and tab indicator — all gated by the bell style.
+function triggerBellEffects() {
   const style = settingsStore.bellStyle;
   if (style === 'none' || !paneReady) return;
-
-  // Visual blink — stays blinking until pane is focused
   if (style === 'visual' || style === 'both') {
     bellFlash.value = true;
   }
-
-  // Audio beep
   if (style === 'sound' || style === 'both') {
     playBellSound();
   }
-
-  // Notify layout store for tab indicator
   if (props.nodeId) {
     layoutStore.notifyBellForPane(props.nodeId);
   }
+}
 
-  // OS-level notification when window is not focused
-  if (!document.hasFocus()) {
-    try {
-      let permGranted = await isPermissionGranted();
-      if (!permGranted) {
-        const perm = await requestPermission();
-        permGranted = perm === 'granted';
-      }
-      if (permGranted) {
-        sendNotification({
-          title: 'Primarch',
-          body: 'A terminal needs your attention',
-        });
-      }
-    } catch {
-      // Notification not available
+// Send an OS notification, but only when the window is unfocused.
+async function sendOsNotification(title: string, body: string) {
+  if (document.hasFocus()) return;
+  try {
+    let permGranted = await isPermissionGranted();
+    if (!permGranted) {
+      const perm = await requestPermission();
+      permGranted = perm === 'granted';
     }
+    if (permGranted) {
+      sendNotification({ title, body });
+    }
+  } catch {
+    // Notification not available
   }
+}
+
+// Bell signal from a program (BEL char).
+async function handleBell() {
+  if (settingsStore.bellStyle === 'none' || !paneReady) return;
+  triggerBellEffects();
+  await sendOsNotification('Primarch', 'A terminal needs your attention');
+}
+
+function formatDuration(ms: number): string {
+  const totalSeconds = Math.round(ms / 1000);
+  if (totalSeconds < 60) return `${totalSeconds}s`;
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${minutes}m ${seconds.toString().padStart(2, '0')}s`;
+}
+
+// A long-running command finished in an unfocused pane.
+async function notifyCommandFinished(command: string, durationMs: number) {
+  triggerBellEffects();
+  if (!settingsStore.notifyCommandFinish) return;
+  const cmd = command.length > 60 ? command.slice(0, 57) + '…' : command;
+  await sendOsNotification('Command finished', `${cmd || 'Command'} · ${formatDuration(durationMs)}`);
 }
 
 // Handle clipboard paste
