@@ -48,3 +48,6 @@ windows = { version = "0.58", features = [
     "Win32_UI_WindowsAndMessaging",
 ] }
 ntapi = "0.4"
+
+[target.'cfg(target_os = "macos")'.dependencies]
+objc = "0.2"

@@ -288,20 +288,22 @@ function handleKeydown(e: KeyboardEvent) {
     layoutStore.focusPreviousPane();
     handled = true;
   }
-  // Alt+Arrows: Focus pane in spatial direction
-  else if (e.altKey && !mod && !e.shiftKey && e.code === 'ArrowLeft') {
+  // Alt+Shift+Arrows: Focus pane in spatial direction.
+  // (Shift is required so plain Alt/Option+Arrow stays free for shell word
+  // navigation, which is the default binding on macOS.)
+  else if (e.altKey && e.shiftKey && !mod && e.code === 'ArrowLeft') {
     layoutStore.focusPaneInDirection('left');
     handled = true;
   }
-  else if (e.altKey && !mod && !e.shiftKey && e.code === 'ArrowRight') {
+  else if (e.altKey && e.shiftKey && !mod && e.code === 'ArrowRight') {
     layoutStore.focusPaneInDirection('right');
     handled = true;
   }
-  else if (e.altKey && !mod && !e.shiftKey && e.code === 'ArrowUp') {
+  else if (e.altKey && e.shiftKey && !mod && e.code === 'ArrowUp') {
     layoutStore.focusPaneInDirection('up');
     handled = true;
   }
-  else if (e.altKey && !mod && !e.shiftKey && e.code === 'ArrowDown') {
+  else if (e.altKey && e.shiftKey && !mod && e.code === 'ArrowDown') {
     layoutStore.focusPaneInDirection('down');
     handled = true;
   }

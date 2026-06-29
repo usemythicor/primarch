@@ -1112,10 +1112,9 @@ fn is_shell_integration_installed() -> bool {
     shell_integration::platform::is_installed()
 }
 
-/// Set the main window's translucency (0-100). Windows-only; a no-op elsewhere.
+/// Apply window translucency on Windows via a layered window.
 #[cfg(windows)]
-#[tauri::command]
-fn set_window_opacity(window: tauri::WebviewWindow, opacity: u8) -> Result<(), String> {
+fn apply_window_opacity(window: &tauri::WebviewWindow, opacity: u8) -> Result<(), String> {
     use windows::Win32::Foundation::{COLORREF, HWND};
     use windows::Win32::UI::WindowsAndMessaging::{
         GetWindowLongPtrW, SetLayeredWindowAttributes, SetWindowLongPtrW, GWL_EXSTYLE, LWA_ALPHA,
@@ -1136,10 +1135,36 @@ fn set_window_opacity(window: tauri::WebviewWindow, opacity: u8) -> Result<(), S
     Ok(())
 }
 
-#[cfg(not(windows))]
-#[tauri::command]
-fn set_window_opacity(_window: tauri::WebviewWindow, _opacity: u8) -> Result<(), String> {
+/// Apply window translucency on macOS via NSWindow.setAlphaValue.
+#[cfg(target_os = "macos")]
+fn apply_window_opacity(window: &tauri::WebviewWindow, opacity: u8) -> Result<(), String> {
+    use objc::runtime::Object;
+    use objc::{msg_send, sel, sel_impl};
+
+    let ns_window = window.ns_window().map_err(|e| e.to_string())? as *mut Object;
+    let alpha: f64 = (opacity.min(100) as f64) / 100.0;
+    unsafe {
+        let _: () = msg_send![ns_window, setAlphaValue: alpha];
+    }
     Ok(())
+}
+
+#[cfg(not(any(windows, target_os = "macos")))]
+fn apply_window_opacity(_window: &tauri::WebviewWindow, _opacity: u8) -> Result<(), String> {
+    Ok(())
+}
+
+/// Set the main window's translucency (0-100). Implemented on Windows and
+/// macOS; a no-op on other platforms. Runs on the main thread because the
+/// underlying AppKit/Win32 calls must happen there.
+#[tauri::command]
+fn set_window_opacity(window: tauri::WebviewWindow, opacity: u8) -> Result<(), String> {
+    let win = window.clone();
+    window
+        .run_on_main_thread(move || {
+            let _ = apply_window_opacity(&win, opacity);
+        })
+        .map_err(|e| e.to_string())
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]

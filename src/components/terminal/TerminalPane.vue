@@ -883,11 +883,12 @@ onMounted(async () => {
           terminal?.scrollPages(1);
           return false;
         }
-        if (event.ctrlKey && event.code === 'Home') {
+        // Ctrl (Windows/Linux) or Cmd (macOS) + Home/End jumps the scrollback.
+        if ((event.ctrlKey || event.metaKey) && event.code === 'Home') {
           terminal?.scrollToTop();
           return false;
         }
-        if (event.ctrlKey && event.code === 'End') {
+        if ((event.ctrlKey || event.metaKey) && event.code === 'End') {
           terminal?.scrollToBottom();
           return false;
         }

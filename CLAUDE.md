@@ -117,9 +117,9 @@ src/
 - `Ctrl+Shift+W` - Close pane
 - `Ctrl+Tab` - Focus next pane
 - `Ctrl+Shift+Tab` - Focus previous pane
-- `Alt+Arrows` - Focus pane in spatial direction
+- `Alt+Shift+Arrows` - Focus pane in spatial direction (plain Alt/Option+Arrow stays free for shell word-nav)
 - `Shift+PageUp` / `Shift+PageDown` - Scroll scrollback by page
-- `Ctrl+Home` / `Ctrl+End` - Jump to top/bottom of scrollback
+- `Ctrl/Cmd+Home` / `Ctrl/Cmd+End` - Jump to top/bottom of scrollback
 - `Ctrl+Shift+S` - Toggle workspace manager
 - `Ctrl+,` - Toggle settings
 - ``Ctrl+Shift+` `` - Quake/dropdown window toggle (global)
