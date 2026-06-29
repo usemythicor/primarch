@@ -21,8 +21,9 @@ import { ref, onMounted, onUnmounted, watch, computed } from 'vue';
 import { WebLinksAddon } from '@xterm/addon-web-links';
 import { invoke } from '@tauri-apps/api/core';
 import { readText, readImage, writeText } from '@tauri-apps/plugin-clipboard-manager';
-import { openUrl } from '@tauri-apps/plugin-opener';
+import { openUrl, openPath } from '@tauri-apps/plugin-opener';
 import { isPermissionGranted, requestPermission, sendNotification } from '@tauri-apps/plugin-notification';
+import { XMarkIcon } from '@heroicons/vue/24/outline';
 import { useTerminal } from '../../composables/useTerminal';
 import { useSettingsStore } from '../../stores/settings';
 import { useLayoutStore } from '../../stores/layout';
@@ -50,6 +51,12 @@ const gitStore = useGitStore();
 const terminalRef = ref<HTMLDivElement>();
 const sessionId = ref<string>();
 const isConnected = ref(false);
+
+// Floating preview shown after pasting an image (the file path is still written
+// to the PTY; this just gives a visual confirmation of what was pasted).
+const pastePreviewUrl = ref<string | null>(null);
+let pastePreviewPath: string | null = null;
+let pastePreviewTimer: ReturnType<typeof setTimeout> | null = null;
 
 let terminal: Terminal | null = null;
 let fitAddon: FitAddon | null = null;
@@ -333,10 +340,73 @@ async function handlePaste() {
 
       // Paste the file path (with quotes in case of spaces)
       await write(sessionId.value, `"${filePath}"`);
+
+      // Show a floating thumbnail so the user can see what they pasted.
+      showImagePreview(rgbaData, size.width, size.height, filePath);
     }
   } catch (e) {
     // No image or failed to save, ignore
     console.error('Failed to paste image:', e);
+  }
+}
+
+// Build a small thumbnail from the pasted RGBA pixels and show it as a
+// floating overlay in the pane corner. Auto-dismisses after a few seconds.
+function showImagePreview(
+  rgba: Uint8Array,
+  width: number,
+  height: number,
+  path: string,
+) {
+  try {
+    const source = document.createElement('canvas');
+    source.width = width;
+    source.height = height;
+    const sctx = source.getContext('2d');
+    if (!sctx) return;
+    sctx.putImageData(new ImageData(new Uint8ClampedArray(rgba), width, height), 0, 0);
+
+    // Downscale to a thumbnail bounded by maxDim on its longest side.
+    const maxDim = 180;
+    const scale = Math.min(1, maxDim / Math.max(width, height));
+    const tw = Math.max(1, Math.round(width * scale));
+    const th = Math.max(1, Math.round(height * scale));
+    const thumb = document.createElement('canvas');
+    thumb.width = tw;
+    thumb.height = th;
+    const tctx = thumb.getContext('2d');
+    if (!tctx) return;
+    tctx.drawImage(source, 0, 0, tw, th);
+
+    pastePreviewUrl.value = thumb.toDataURL('image/png');
+    pastePreviewPath = path;
+
+    if (pastePreviewTimer) clearTimeout(pastePreviewTimer);
+    pastePreviewTimer = setTimeout(dismissImagePreview, 6000);
+  } catch (e) {
+    console.error('Failed to build image preview:', e);
+  }
+}
+
+function dismissImagePreview() {
+  pastePreviewUrl.value = null;
+  pastePreviewPath = null;
+  if (pastePreviewTimer) {
+    clearTimeout(pastePreviewTimer);
+    pastePreviewTimer = null;
+  }
+}
+
+// Open the pasted image full-size with the OS default viewer.
+async function openPastedImage() {
+  const path = pastePreviewPath;
+  dismissImagePreview();
+  if (path) {
+    try {
+      await openPath(path);
+    } catch (e) {
+      console.error('Failed to open pasted image:', e);
+    }
   }
 }
 
@@ -744,6 +814,8 @@ onMounted(async () => {
 
 // Cleanup on unmount
 onUnmounted(async () => {
+  if (pastePreviewTimer) clearTimeout(pastePreviewTimer);
+
   // Unregister session from layout store
   if (props.nodeId) {
     layoutStore.unregisterSession(props.nodeId);
@@ -814,11 +886,31 @@ defineExpose({ focus, toggleSearch, getBufferText });
       @close="closeSearch"
     />
     <div ref="terminalRef" class="terminal-container"></div>
+
+    <!-- Floating preview of the most recently pasted image -->
+    <Transition name="paste-preview">
+      <div
+        v-if="pastePreviewUrl"
+        class="paste-preview"
+        title="Open pasted image"
+        @click="openPastedImage"
+      >
+        <img :src="pastePreviewUrl" alt="Pasted image preview" />
+        <button
+          class="paste-preview-close"
+          title="Dismiss"
+          @click.stop="dismissImagePreview"
+        >
+          <XMarkIcon class="w-3 h-3" />
+        </button>
+      </div>
+    </Transition>
   </div>
 </template>
 
 <style scoped>
 .terminal-pane {
+  position: relative;
   width: 100%;
   height: 100%;
   overflow: hidden;
@@ -826,6 +918,67 @@ defineExpose({ focus, toggleSearch, getBufferText });
   box-sizing: border-box;
   display: flex;
   flex-direction: column;
+}
+
+.paste-preview {
+  position: absolute;
+  right: 12px;
+  bottom: 12px;
+  z-index: 20;
+  padding: 4px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-default);
+  border-radius: 4px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.45);
+  cursor: pointer;
+  line-height: 0;
+  transition: transform 0.1s ease, border-color 0.1s ease;
+}
+
+.paste-preview:hover {
+  transform: translateY(-1px);
+  border-color: var(--accent-cyan);
+}
+
+.paste-preview img {
+  display: block;
+  max-width: 180px;
+  max-height: 180px;
+  border-radius: 2px;
+}
+
+.paste-preview-close {
+  position: absolute;
+  top: -7px;
+  right: -7px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  color: var(--text-primary);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-default);
+  border-radius: 50%;
+  cursor: pointer;
+  transition: color 0.1s ease, border-color 0.1s ease;
+}
+
+.paste-preview-close:hover {
+  color: var(--accent-red);
+  border-color: var(--accent-red);
+}
+
+.paste-preview-enter-active,
+.paste-preview-leave-active {
+  transition: opacity 0.15s ease, transform 0.15s ease;
+}
+
+.paste-preview-enter-from,
+.paste-preview-leave-to {
+  opacity: 0;
+  transform: translateY(6px);
 }
 
 .terminal-container {
