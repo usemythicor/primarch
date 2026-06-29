@@ -1134,8 +1134,27 @@ pub fn run() {
             tauri_plugin_global_shortcut::Builder::new()
                 .with_handler(|app, shortcut, event| {
                     if event.state() == tauri_plugin_global_shortcut::ShortcutState::Pressed {
-                        // Only emit when our window is focused so we don't steal
-                        // the shortcut from other applications.
+                        use tauri_plugin_global_shortcut::{Code, Modifiers};
+                        // Quake/dropdown toggle (Ctrl/Cmd+Shift+`). Works even when
+                        // the window is unfocused so it can summon the window.
+                        let is_quake = shortcut.matches(Modifiers::CONTROL | Modifiers::SHIFT, Code::Backquote)
+                            || shortcut.matches(Modifiers::SUPER | Modifiers::SHIFT, Code::Backquote);
+                        if is_quake {
+                            if let Some(w) = app.get_webview_window("main") {
+                                let visible = w.is_visible().unwrap_or(true);
+                                let focused = w.is_focused().unwrap_or(false);
+                                if visible && focused {
+                                    let _ = w.hide();
+                                } else {
+                                    let _ = w.unminimize();
+                                    let _ = w.show();
+                                    let _ = w.set_focus();
+                                }
+                            }
+                            return;
+                        }
+                        // Other shortcuts: only emit when our window is focused so
+                        // we don't steal the shortcut from other applications.
                         if let Some(w) = app.get_webview_window("main") {
                             if w.is_focused().unwrap_or(false) {
                                 let _ = app.emit("global-shortcut", shortcut.to_string());

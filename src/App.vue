@@ -407,6 +407,14 @@ onMounted(async () => {
     console.warn('Failed to register global shortcut CmdOrCtrl+P:', e);
   }
 
+  // Quake/dropdown toggle — handled entirely in Rust so it can summon the
+  // window even when it's hidden or unfocused.
+  try {
+    await register('CmdOrCtrl+Shift+Backquote', () => {});
+  } catch (e) {
+    console.warn('Failed to register quake shortcut:', e);
+  }
+
   // Listen for global shortcut events from Rust
   globalShortcutUnlisten = await listen<string>('global-shortcut', (event) => {
     if (event.payload.includes('P') && !event.payload.includes('Shift')) {
@@ -433,6 +441,11 @@ onUnmounted(async () => {
   }
   try {
     await unregister('CmdOrCtrl+P');
+  } catch (e) {
+    // Ignore errors during cleanup
+  }
+  try {
+    await unregister('CmdOrCtrl+Shift+Backquote');
   } catch (e) {
     // Ignore errors during cleanup
   }
