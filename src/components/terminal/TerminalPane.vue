@@ -419,6 +419,72 @@ async function openPastedImage() {
   }
 }
 
+// Detects absolute (C:\…, /usr/…), home (~/…), dot-relative (./…, ../…), and
+// word/word.ext relative file paths, with an optional :line:col suffix.
+const FILE_PATH_RE = /(?<=^|\s)((?:[A-Za-z]:[\\/]|\.\.?[\\/]|~[\\/]|[\\/])[^\s:*?"<>|]*|(?:[\w.\-]+[\\/])+[\w.\-]+\.[A-Za-z0-9]+)(?::(\d+)(?::(\d+))?)?/g;
+
+// Build an xterm link provider that turns file paths in the buffer into
+// clickable links.
+function createFilePathLinkProvider(term: Terminal) {
+  return {
+    provideLinks(y: number, callback: (links: any[] | undefined) => void) {
+      const line = term.buffer.active.getLine(y - 1);
+      if (!line) {
+        callback(undefined);
+        return;
+      }
+      const text = line.translateToString(true);
+      const links: any[] = [];
+      const re = new RegExp(FILE_PATH_RE.source, 'g');
+      let m: RegExpExecArray | null;
+      while ((m = re.exec(text)) !== null) {
+        const full = m[0];
+        const path = m[1];
+        const lineNo = m[2] ? parseInt(m[2], 10) : undefined;
+        links.push({
+          text: full,
+          range: {
+            start: { x: m.index + 1, y },
+            end: { x: m.index + full.length, y },
+          },
+          activate: () => { openFilePathLink(path, lineNo); },
+        });
+      }
+      callback(links.length ? links : undefined);
+    },
+  };
+}
+
+async function currentCwd(): Promise<string | null> {
+  if (!sessionId.value) return null;
+  try {
+    return await invoke<string>('get_terminal_cwd', { sessionId: sessionId.value });
+  } catch {
+    return null;
+  }
+}
+
+async function openFilePathLink(rawPath: string, _lineNo?: number) {
+  try {
+    // Strip trailing punctuation that often abuts a path in prose.
+    let p = rawPath.replace(/[)\]}.,;'"]+$/, '');
+    const isAbsolute = /^[A-Za-z]:[\\/]/.test(p) || /^[\\/]/.test(p) || p.startsWith('~');
+    if (!isAbsolute) {
+      const cwd = await currentCwd();
+      if (!cwd) return;
+      const sep = cwd.includes('\\') ? '\\' : '/';
+      p = cwd.replace(/[\\/]$/, '') + sep + p.replace(/^\.[\\/]/, '');
+    }
+    if (/\.md$/i.test(p) && (window as any).__openMarkdownViewer) {
+      (window as any).__openMarkdownViewer(p);
+      return;
+    }
+    await openPath(p);
+  } catch (e) {
+    console.error('Failed to open path link:', e);
+  }
+}
+
 // Multi-line paste confirmation state
 const pendingPasteText = ref<string | null>(null);
 const pendingPasteLines = ref(0);
@@ -515,6 +581,10 @@ onMounted(async () => {
     searchAddon = new SearchAddon();
     terminal.loadAddon(searchAddon);
     setupSearchResultListener();
+
+    // Make file paths in terminal output clickable (opens in the OS default app,
+    // or the in-app markdown viewer for .md files).
+    terminal.registerLinkProvider(createFilePathLinkProvider(terminal));
 
     // Create a wrapper div for the terminal so we can re-parent it later
     xtermElement = document.createElement('div');
