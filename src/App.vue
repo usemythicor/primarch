@@ -286,6 +286,23 @@ function handleKeydown(e: KeyboardEvent) {
     layoutStore.focusPreviousPane();
     handled = true;
   }
+  // Alt+Arrows: Focus pane in spatial direction
+  else if (e.altKey && !mod && !e.shiftKey && e.code === 'ArrowLeft') {
+    layoutStore.focusPaneInDirection('left');
+    handled = true;
+  }
+  else if (e.altKey && !mod && !e.shiftKey && e.code === 'ArrowRight') {
+    layoutStore.focusPaneInDirection('right');
+    handled = true;
+  }
+  else if (e.altKey && !mod && !e.shiftKey && e.code === 'ArrowUp') {
+    layoutStore.focusPaneInDirection('up');
+    handled = true;
+  }
+  else if (e.altKey && !mod && !e.shiftKey && e.code === 'ArrowDown') {
+    layoutStore.focusPaneInDirection('down');
+    handled = true;
+  }
   // Cmd/Ctrl+Shift+S: Toggle workspace manager
   else if (mod && e.shiftKey && e.code === 'KeyS') {
     showSettings.value = false;
@@ -534,6 +551,7 @@ onUnmounted(async () => {
         <div
           v-for="tab in layoutStore.tabs"
           :key="tab.id"
+          :data-tab-id="tab.id"
           class="absolute inset-0"
           :class="{ 'pointer-events-none': tab.id !== layoutStore.activeTabId }"
           :style="{ visibility: tab.id === layoutStore.activeTabId ? 'visible' : 'hidden' }"

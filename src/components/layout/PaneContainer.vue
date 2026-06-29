@@ -195,6 +195,7 @@ onUnmounted(() => window.removeEventListener('primarch-export-output', onExportE
   <div
     v-else-if="isTerminal"
     class="terminal-wrapper h-full w-full relative"
+    :data-node-id="node.id"
     :class="{
       'pane-active': layoutStore.activePane === node.id,
       'pane-zoomed': layoutStore.zoomedPaneId === node.id,
