@@ -26,6 +26,7 @@ import SettingsPanel from './components/settings/SettingsPanel.vue';
 import CommandPalette from './components/palette/CommandPalette.vue';
 import GitSidebar from './components/git/GitSidebar.vue';
 import DiffViewer from './components/git/DiffViewer.vue';
+import BranchSelector from './components/git/BranchSelector.vue';
 import MarkdownViewer from './components/viewer/MarkdownViewer.vue';
 import { useLayoutStore } from './stores/layout';
 import { createTerminalNode } from './components/layout/LayoutTree';
@@ -175,6 +176,7 @@ watch(() => settingsStore.availableAiClis, (clis) => {
 }, { immediate: true });
 const gitChangeCount = computed(() => gitStore.changeCount);
 const showDiffViewer = computed(() => gitStore.diffVisible);
+const showBranchSelector = computed(() => gitStore.branchSelectorVisible);
 const gitBranchName = computed(() => gitStore.branchName);
 const gitAhead = computed(() => gitStore.ahead);
 const gitBehind = computed(() => gitStore.behind);
@@ -578,6 +580,12 @@ onUnmounted(async () => {
 
       <!-- Modals -->
       <Teleport to="body">
+        <!-- Branch Selector -->
+        <BranchSelector
+          v-if="showBranchSelector"
+          @close="gitStore.hideBranchSelector()"
+        />
+
         <!-- Command Palette -->
         <Transition
           enter-active-class="transition duration-100 ease-out"
@@ -674,23 +682,37 @@ onUnmounted(async () => {
     >
       <div class="flex items-center gap-4">
         <!-- Git branch info -->
-        <div
-          class="flex items-center gap-2 cursor-pointer hover:opacity-80"
-          @click="gitStore.toggleSidebar()"
-          title="Source Control (Ctrl+Shift+G)"
-        >
-          <CodeBracketIcon class="w-3 h-3" style="color: var(--text-muted);" />
+        <div class="flex items-center gap-2">
+          <CodeBracketIcon
+            class="w-3 h-3 cursor-pointer hover:opacity-80"
+            style="color: var(--text-muted);"
+            title="Source Control (Ctrl+Shift+G)"
+            @click="gitStore.toggleSidebar()"
+          />
           <template v-if="gitHasRepo">
-            <span class="text-label" style="color: var(--text-secondary);">{{ gitBranchName || 'No branch' }}</span>
+            <button
+              class="flex items-center gap-1 hover:opacity-80"
+              title="Switch branch"
+              @click="gitStore.showBranchSelector()"
+            >
+              <span class="text-label" style="color: var(--text-secondary);">{{ gitBranchName || 'No branch' }}</span>
+              <svg class="w-2.5 h-2.5" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" style="color: var(--text-muted);"><path d="M3 4.5 6 7.5 9 4.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </button>
             <span
               v-if="gitChangeCount > 0"
-              class="px-1 rounded text-label"
+              class="px-1 rounded text-label cursor-pointer"
               style="background: var(--accent-cyan); color: var(--bg-primary); font-size: 0.55rem;"
+              @click="gitStore.toggleSidebar()"
             >
               {{ gitChangeCount }}
             </span>
           </template>
-          <span v-else class="text-label" style="color: var(--text-muted);">No Repository</span>
+          <span
+            v-else
+            class="text-label cursor-pointer hover:opacity-80"
+            style="color: var(--text-muted);"
+            @click="gitStore.toggleSidebar()"
+          >No Repository</span>
         </div>
 
         <!-- Pull / Push — grouped tightly -->
