@@ -23,7 +23,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { readText, readImage, writeText } from '@tauri-apps/plugin-clipboard-manager';
 import { openUrl, openPath } from '@tauri-apps/plugin-opener';
 import { isPermissionGranted, requestPermission, sendNotification } from '@tauri-apps/plugin-notification';
-import { XMarkIcon } from '@heroicons/vue/24/outline';
+import { XMarkIcon, ChevronDownIcon } from '@heroicons/vue/24/outline';
 import { useTerminal } from '../../composables/useTerminal';
 import { useSettingsStore } from '../../stores/settings';
 import { useLayoutStore } from '../../stores/layout';
@@ -485,6 +485,15 @@ async function openFilePathLink(rawPath: string, _lineNo?: number) {
   }
 }
 
+// True when the viewport is scrolled up into the scrollback (not at live bottom).
+const isScrolledUp = ref(false);
+
+function scrollToLiveBottom() {
+  terminal?.scrollToBottom();
+  isScrolledUp.value = false;
+  terminal?.focus();
+}
+
 // Multi-line paste confirmation state
 const pendingPasteText = ref<string | null>(null);
 const pendingPasteLines = ref(0);
@@ -763,6 +772,12 @@ onMounted(async () => {
       handleBell();
     });
 
+    // Track whether the viewport is scrolled up from the live bottom so we can
+    // show a "jump to bottom" affordance.
+    terminal.onScroll((position) => {
+      isScrolledUp.value = position < (terminal?.buffer.active.baseY ?? 0);
+    });
+
     // Intercept paste events at capture phase before xterm handles them
     // This is the ONLY place we handle paste - prevents double-paste
     terminalRef.value.addEventListener('paste', (event) => {
@@ -815,6 +830,23 @@ onMounted(async () => {
     // Handle clipboard copy and let app-level shortcuts bubble up
     terminal.attachCustomKeyEventHandler((event) => {
       if (event.type === 'keydown') {
+        // Scrollback navigation (handled locally, not forwarded to the PTY)
+        if (event.shiftKey && event.code === 'PageUp') {
+          terminal?.scrollPages(-1);
+          return false;
+        }
+        if (event.shiftKey && event.code === 'PageDown') {
+          terminal?.scrollPages(1);
+          return false;
+        }
+        if (event.ctrlKey && event.code === 'Home') {
+          terminal?.scrollToTop();
+          return false;
+        }
+        if (event.ctrlKey && event.code === 'End') {
+          terminal?.scrollToBottom();
+          return false;
+        }
         // Ctrl+V: let the paste event listener handle it (prevents double-paste)
         if (event.ctrlKey && event.code === 'KeyV') {
           return false;
@@ -984,6 +1016,19 @@ defineExpose({ focus, toggleSearch, getBufferText });
     />
     <div ref="terminalRef" class="terminal-container"></div>
 
+    <!-- Scroll-locked indicator: jump back to the live bottom -->
+    <Transition name="paste-preview">
+      <button
+        v-if="isScrolledUp"
+        class="scroll-bottom-pill"
+        title="Scrolled up — jump to bottom"
+        @click="scrollToLiveBottom"
+      >
+        <ChevronDownIcon class="w-3 h-3" />
+        <span>Jump to bottom</span>
+      </button>
+    </Transition>
+
     <!-- Multi-line paste confirmation -->
     <Transition name="paste-preview">
       <div v-if="pendingPasteText" class="paste-confirm-backdrop" @click.self="cancelPaste">
@@ -1083,6 +1128,32 @@ defineExpose({ focus, toggleSearch, getBufferText });
 .paste-preview-close:hover {
   color: var(--accent-red);
   border-color: var(--accent-red);
+}
+
+.scroll-bottom-pill {
+  position: absolute;
+  left: 50%;
+  bottom: 12px;
+  transform: translateX(-50%);
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 12px;
+  font-size: 0.65rem;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  color: var(--bg-primary);
+  background: var(--accent-cyan);
+  border: none;
+  border-radius: 999px;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.4);
+  cursor: pointer;
+  transition: opacity 0.1s ease;
+}
+
+.scroll-bottom-pill:hover {
+  opacity: 0.9;
 }
 
 .paste-confirm-backdrop {
