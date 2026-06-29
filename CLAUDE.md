@@ -117,8 +117,12 @@ src/
 - `Ctrl+Shift+W` - Close pane
 - `Ctrl+Tab` - Focus next pane
 - `Ctrl+Shift+Tab` - Focus previous pane
+- `Alt+Arrows` - Focus pane in spatial direction
+- `Shift+PageUp` / `Shift+PageDown` - Scroll scrollback by page
+- `Ctrl+Home` / `Ctrl+End` - Jump to top/bottom of scrollback
 - `Ctrl+Shift+S` - Toggle workspace manager
 - `Ctrl+,` - Toggle settings
+- ``Ctrl+Shift+` `` - Quake/dropdown window toggle (global)
 
 **Available Themes:**
 - Dark: Dracula, One Dark, Monokai, Nord, Solarized Dark, GitHub Dark, Gruvbox Dark, Tokyo Night, Catppuccin Mocha, Ayu Dark, Synthwave '84, Palenight, Rosé Pine
