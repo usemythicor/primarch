@@ -99,6 +99,10 @@ const contextMenuItems = computed<ContextMenuItem[]>(() => {
     },
     { separator: true as const },
     {
+      label: 'Open Folder in File Manager',
+      action: () => revealPaneFolder(),
+    },
+    {
       label: 'Save Output',
       action: () => exportTerminalOutput(),
     },
@@ -115,6 +119,18 @@ const contextMenuItems = computed<ContextMenuItem[]>(() => {
     },
   ];
 });
+
+async function revealPaneFolder() {
+  const nodeId = props.node.id;
+  if (!nodeId) return;
+  const sessionId = layoutStore.getSessionId(nodeId);
+  if (!sessionId) return;
+  try {
+    const cwd = await invoke<string>('get_terminal_cwd', { sessionId });
+    const { openPath } = await import('@tauri-apps/plugin-opener');
+    await openPath(cwd);
+  } catch { /* ignore */ }
+}
 
 async function exportTerminalOutput() {
   const text = terminalPaneRef.value?.getBufferText();
