@@ -1112,6 +1112,36 @@ fn is_shell_integration_installed() -> bool {
     shell_integration::platform::is_installed()
 }
 
+/// Set the main window's translucency (0-100). Windows-only; a no-op elsewhere.
+#[cfg(windows)]
+#[tauri::command]
+fn set_window_opacity(window: tauri::WebviewWindow, opacity: u8) -> Result<(), String> {
+    use windows::Win32::Foundation::{COLORREF, HWND};
+    use windows::Win32::UI::WindowsAndMessaging::{
+        GetWindowLongPtrW, SetLayeredWindowAttributes, SetWindowLongPtrW, GWL_EXSTYLE, LWA_ALPHA,
+        WS_EX_LAYERED,
+    };
+
+    // tauri's hwnd() returns an HWND from a different `windows` crate version,
+    // so rebuild our crate's HWND from the raw pointer.
+    let raw = window.hwnd().map_err(|e| e.to_string())?;
+    let hwnd = HWND(raw.0 as *mut core::ffi::c_void);
+    let alpha = ((opacity.min(100) as u32) * 255 / 100) as u8;
+    unsafe {
+        let ex_style = GetWindowLongPtrW(hwnd, GWL_EXSTYLE);
+        SetWindowLongPtrW(hwnd, GWL_EXSTYLE, ex_style | WS_EX_LAYERED.0 as isize);
+        SetLayeredWindowAttributes(hwnd, COLORREF(0), alpha, LWA_ALPHA)
+            .map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
+#[cfg(not(windows))]
+#[tauri::command]
+fn set_window_opacity(_window: tauri::WebviewWindow, _opacity: u8) -> Result<(), String> {
+    Ok(())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     // Parse --cwd from launch arguments (consumed by the first create_terminal).
@@ -1247,6 +1277,8 @@ pub fn run() {
             install_shell_integration,
             uninstall_shell_integration,
             is_shell_integration_installed,
+            // Window commands
+            set_window_opacity,
         ])
         .setup(|_app| {
             // On Windows, disable decorations for the custom title bar.

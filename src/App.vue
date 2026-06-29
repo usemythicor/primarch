@@ -363,6 +363,12 @@ watch(terminalBg, (bg) => {
   document.body.style.background = bg;
 }, { immediate: true });
 
+// Apply window translucency (Windows-only; no-op elsewhere).
+function applyWindowOpacity(opacity: number) {
+  invoke('set_window_opacity', { opacity: Math.round(opacity) }).catch(() => {});
+}
+watch(() => settingsStore.windowOpacity, applyWindowOpacity);
+
 onMounted(async () => {
   window.addEventListener('keydown', handleKeydown, true);
   // Restore saved window size/position before anything renders
@@ -384,6 +390,8 @@ onMounted(async () => {
   isMaximized.value = await appWindow.isMaximized();
   appWindow.onResized(() => { updateMaximizedState(); debouncedSaveWindowState(); });
   appWindow.onMoved(debouncedSaveWindowState);
+  // Apply saved window opacity
+  applyWindowOpacity(settingsStore.windowOpacity);
   // Get app version
   appVersion.value = await getVersion();
   // Check for updates silently on startup
