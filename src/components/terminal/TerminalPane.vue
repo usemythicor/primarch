@@ -485,6 +485,26 @@ async function openFilePathLink(rawPath: string, _lineNo?: number) {
   }
 }
 
+// Optional per-pane header showing directory + running process.
+const headerCwd = ref('');
+const headerTitle = ref('');
+const headerDir = computed(() => {
+  const p = headerCwd.value;
+  if (!p) return '';
+  const trimmed = p.replace(/[\\/]+$/, '');
+  const parts = trimmed.split(/[\\/]/);
+  return parts[parts.length - 1] || trimmed;
+});
+let headerInterval: ReturnType<typeof setInterval> | null = null;
+
+async function updatePaneHeader() {
+  if (!settingsStore.showPaneHeader || !sessionId.value) return;
+  try {
+    const cwd = await invoke<string>('get_terminal_cwd', { sessionId: sessionId.value });
+    if (cwd) headerCwd.value = cwd;
+  } catch { /* ignore */ }
+}
+
 // True when the viewport is scrolled up into the scrollback (not at live bottom).
 const isScrolledUp = ref(false);
 
@@ -544,6 +564,9 @@ watch(
 // Initialize terminal
 onMounted(async () => {
   if (!terminalRef.value) return;
+
+  // Poll the directory for the optional pane header (cheap, gated by setting).
+  headerInterval = setInterval(updatePaneHeader, 2000);
 
   const reattachId = props.existingSessionId;
   const isReattach = reattachId && layoutStore.isPendingReattach(reattachId);
@@ -764,6 +787,7 @@ onMounted(async () => {
 
     // Handle title changes
     terminal.onTitleChange((title) => {
+      headerTitle.value = title;
       emit('title-change', title);
     });
 
@@ -944,6 +968,7 @@ onMounted(async () => {
 // Cleanup on unmount
 onUnmounted(async () => {
   if (pastePreviewTimer) clearTimeout(pastePreviewTimer);
+  if (headerInterval) clearInterval(headerInterval);
 
   // Unregister session from layout store
   if (props.nodeId) {
@@ -1014,6 +1039,11 @@ defineExpose({ focus, toggleSearch, getBufferText });
       @previous="handleSearchPrevious"
       @close="closeSearch"
     />
+    <div v-if="settingsStore.showPaneHeader" class="pane-header">
+      <span class="pane-header-dir">{{ headerDir || '—' }}</span>
+      <span v-if="headerTitle" class="pane-header-proc">{{ headerTitle }}</span>
+    </div>
+
     <div ref="terminalRef" class="terminal-container"></div>
 
     <!-- Scroll-locked indicator: jump back to the live bottom -->
@@ -1252,6 +1282,36 @@ defineExpose({ focus, toggleSearch, getBufferText });
   width: 100%;
   flex: 1;
   min-height: 0;
+}
+
+.pane-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 20px;
+  min-height: 20px;
+  padding: 0 8px;
+  margin-bottom: 2px;
+  background: var(--bg-primary);
+  border-bottom: 1px solid var(--border-subtle);
+  overflow: hidden;
+}
+
+.pane-header-dir {
+  font-size: 0.6rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.pane-header-proc {
+  font-size: 0.6rem;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .terminal-pane.bell-flash {
