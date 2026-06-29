@@ -317,7 +317,16 @@ async function handlePaste() {
     // Try to read text first
     const text = await readText();
     if (text) {
-      await write(sessionId.value, text);
+      // Guard against accidentally running multiple commands at once: a paste
+      // containing newlines (other than a single trailing one) is confirmed
+      // first instead of being executed immediately.
+      const lineCount = text.replace(/\r?\n$/, '').split(/\r?\n/).length;
+      if (lineCount > 1) {
+        pendingPasteText.value = text;
+        pendingPasteLines.value = lineCount;
+      } else {
+        await write(sessionId.value, text);
+      }
       return;
     }
   } catch {
@@ -408,6 +417,24 @@ async function openPastedImage() {
       console.error('Failed to open pasted image:', e);
     }
   }
+}
+
+// Multi-line paste confirmation state
+const pendingPasteText = ref<string | null>(null);
+const pendingPasteLines = ref(0);
+
+async function confirmPaste() {
+  const text = pendingPasteText.value;
+  pendingPasteText.value = null;
+  if (text && sessionId.value) {
+    await write(sessionId.value, text);
+  }
+  terminal?.focus();
+}
+
+function cancelPaste() {
+  pendingPasteText.value = null;
+  terminal?.focus();
 }
 
 // Handle clipboard copy
@@ -887,6 +914,24 @@ defineExpose({ focus, toggleSearch, getBufferText });
     />
     <div ref="terminalRef" class="terminal-container"></div>
 
+    <!-- Multi-line paste confirmation -->
+    <Transition name="paste-preview">
+      <div v-if="pendingPasteText" class="paste-confirm-backdrop" @click.self="cancelPaste">
+        <div class="paste-confirm">
+          <div class="paste-confirm-title">
+            Paste {{ pendingPasteLines }} lines?
+          </div>
+          <pre class="paste-confirm-body">{{ pendingPasteText }}</pre>
+          <div class="paste-confirm-actions">
+            <button class="paste-confirm-btn" @click="cancelPaste">Cancel</button>
+            <button class="paste-confirm-btn paste-confirm-btn-primary" @click="confirmPaste">
+              Paste
+            </button>
+          </div>
+        </div>
+      </div>
+    </Transition>
+
     <!-- Floating preview of the most recently pasted image -->
     <Transition name="paste-preview">
       <div
@@ -968,6 +1013,87 @@ defineExpose({ focus, toggleSearch, getBufferText });
 .paste-preview-close:hover {
   color: var(--accent-red);
   border-color: var(--accent-red);
+}
+
+.paste-confirm-backdrop {
+  position: absolute;
+  inset: 0;
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(2px);
+}
+
+.paste-confirm {
+  width: min(440px, 90%);
+  max-height: 80%;
+  display: flex;
+  flex-direction: column;
+  padding: 14px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-default);
+  border-radius: 6px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+}
+
+.paste-confirm-title {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 8px;
+}
+
+.paste-confirm-body {
+  flex: 1;
+  min-height: 0;
+  max-height: 180px;
+  overflow: auto;
+  margin: 0 0 12px;
+  padding: 8px;
+  font-size: 0.7rem;
+  line-height: 1.4;
+  color: var(--text-secondary);
+  background: var(--bg-primary);
+  border: 1px solid var(--border-subtle);
+  border-radius: 4px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.paste-confirm-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.paste-confirm-btn {
+  padding: 5px 14px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-default);
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.1s ease;
+}
+
+.paste-confirm-btn:hover {
+  color: var(--text-primary);
+  border-color: var(--border-strong);
+}
+
+.paste-confirm-btn-primary {
+  color: var(--bg-primary);
+  background: var(--accent-cyan);
+  border-color: var(--accent-cyan);
+}
+
+.paste-confirm-btn-primary:hover {
+  color: var(--bg-primary);
+  opacity: 0.9;
 }
 
 .paste-preview-enter-active,
