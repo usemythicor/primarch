@@ -359,6 +359,8 @@ onMounted(async () => {
   (window as any).__openMarkdownViewer = openMarkdownViewer;
   // Start watching for CWD changes to update git
   gitStore.startCwdWatcher();
+  // Auto-name tabs after their terminal's working directory
+  layoutStore.startTabNameWatcher();
   // Track window maximize state and persist window geometry
   isMaximized.value = await appWindow.isMaximized();
   appWindow.onResized(() => { updateMaximizedState(); debouncedSaveWindowState(); });
@@ -402,6 +404,7 @@ onMounted(async () => {
 onUnmounted(async () => {
   window.removeEventListener('keydown', handleKeydown, true);
   gitStore.stopCwdWatcher();
+  layoutStore.stopTabNameWatcher();
   // Unregister event listeners
   if (openDirUnlisten) {
     openDirUnlisten();
