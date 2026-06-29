@@ -23,6 +23,9 @@ export interface LayoutNode {
 export interface Tab {
   id: string;
   name: string;
+  /** When true, the name auto-tracks the active terminal's working directory.
+   *  Set to false once the user manually renames the tab. */
+  autoName: boolean;
   layout: LayoutNode;
   sessionRegistry: Map<string, string>;
   pendingReattach: Set<string>;

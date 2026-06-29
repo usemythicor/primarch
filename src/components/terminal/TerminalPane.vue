@@ -21,8 +21,9 @@ import { ref, onMounted, onUnmounted, watch, computed } from 'vue';
 import { WebLinksAddon } from '@xterm/addon-web-links';
 import { invoke } from '@tauri-apps/api/core';
 import { readText, readImage, writeText } from '@tauri-apps/plugin-clipboard-manager';
-import { openUrl } from '@tauri-apps/plugin-opener';
+import { openUrl, openPath } from '@tauri-apps/plugin-opener';
 import { isPermissionGranted, requestPermission, sendNotification } from '@tauri-apps/plugin-notification';
+import { XMarkIcon, ChevronDownIcon } from '@heroicons/vue/24/outline';
 import { useTerminal } from '../../composables/useTerminal';
 import { useSettingsStore } from '../../stores/settings';
 import { useLayoutStore } from '../../stores/layout';
@@ -50,6 +51,12 @@ const gitStore = useGitStore();
 const terminalRef = ref<HTMLDivElement>();
 const sessionId = ref<string>();
 const isConnected = ref(false);
+
+// Floating preview shown after pasting an image (the file path is still written
+// to the PTY; this just gives a visual confirmation of what was pasted).
+const pastePreviewUrl = ref<string | null>(null);
+let pastePreviewPath: string | null = null;
+let pastePreviewTimer: ReturnType<typeof setTimeout> | null = null;
 
 let terminal: Terminal | null = null;
 let fitAddon: FitAddon | null = null;
@@ -197,6 +204,8 @@ let idleTimer: ReturnType<typeof setTimeout> | null = null;
 let outputBytesInBurst = 0;
 let outputStartTime = 0;
 let commandRunning = false; // Armed when user presses Enter, disarmed after notification
+let lastCommand = ''; // The command text captured when the detector arms
+let commandArmTime = 0; // Timestamp (ms) the command was submitted
 let paneReady = false; // Suppress bells during shell startup
 const STARTUP_GRACE_MS = 5000;
 const IDLE_THRESHOLD_MS = 2000;
@@ -225,7 +234,7 @@ function onTerminalOutput(dataLength: number) {
       duration >= MIN_DURATION_MS &&
       !isPaneActive()
     ) {
-      handleBell();
+      notifyCommandFinished(lastCommand, Date.now() - commandArmTime);
       commandRunning = false; // Disarm — won't fire again until next Enter
     }
     outputBytesInBurst = 0;
@@ -236,6 +245,8 @@ function onUserInput(data: string) {
   // Enter key arms the detector for the next command
   if (data === '\r') {
     commandRunning = true;
+    lastCommand = inputBuffer.trim();
+    commandArmTime = Date.now();
     outputBytesInBurst = 0;
     if (idleTimer) {
       clearTimeout(idleTimer);
@@ -263,43 +274,59 @@ function playBellSound() {
   osc.stop(audioCtx.currentTime + 0.15);
 }
 
-async function handleBell() {
+// Visual blink, audio beep and tab indicator — all gated by the bell style.
+function triggerBellEffects() {
   const style = settingsStore.bellStyle;
   if (style === 'none' || !paneReady) return;
-
-  // Visual blink — stays blinking until pane is focused
   if (style === 'visual' || style === 'both') {
     bellFlash.value = true;
   }
-
-  // Audio beep
   if (style === 'sound' || style === 'both') {
     playBellSound();
   }
-
-  // Notify layout store for tab indicator
   if (props.nodeId) {
     layoutStore.notifyBellForPane(props.nodeId);
   }
+}
 
-  // OS-level notification when window is not focused
-  if (!document.hasFocus()) {
-    try {
-      let permGranted = await isPermissionGranted();
-      if (!permGranted) {
-        const perm = await requestPermission();
-        permGranted = perm === 'granted';
-      }
-      if (permGranted) {
-        sendNotification({
-          title: 'Primarch',
-          body: 'A terminal needs your attention',
-        });
-      }
-    } catch {
-      // Notification not available
+// Send an OS notification, but only when the window is unfocused.
+async function sendOsNotification(title: string, body: string) {
+  if (document.hasFocus()) return;
+  try {
+    let permGranted = await isPermissionGranted();
+    if (!permGranted) {
+      const perm = await requestPermission();
+      permGranted = perm === 'granted';
     }
+    if (permGranted) {
+      sendNotification({ title, body });
+    }
+  } catch {
+    // Notification not available
   }
+}
+
+// Bell signal from a program (BEL char).
+async function handleBell() {
+  if (settingsStore.bellStyle === 'none' || !paneReady) return;
+  triggerBellEffects();
+  await sendOsNotification('Primarch', 'A terminal needs your attention');
+}
+
+function formatDuration(ms: number): string {
+  const totalSeconds = Math.round(ms / 1000);
+  if (totalSeconds < 60) return `${totalSeconds}s`;
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${minutes}m ${seconds.toString().padStart(2, '0')}s`;
+}
+
+// A long-running command finished in an unfocused pane.
+async function notifyCommandFinished(command: string, durationMs: number) {
+  triggerBellEffects();
+  if (!settingsStore.notifyCommandFinish) return;
+  const cmd = command.length > 60 ? command.slice(0, 57) + '…' : command;
+  await sendOsNotification('Command finished', `${cmd || 'Command'} · ${formatDuration(durationMs)}`);
 }
 
 // Handle clipboard paste
@@ -310,7 +337,16 @@ async function handlePaste() {
     // Try to read text first
     const text = await readText();
     if (text) {
-      await write(sessionId.value, text);
+      // Guard against accidentally running multiple commands at once: a paste
+      // containing newlines (other than a single trailing one) is confirmed
+      // first instead of being executed immediately.
+      const lineCount = text.replace(/\r?\n$/, '').split(/\r?\n/).length;
+      if (lineCount > 1) {
+        pendingPasteText.value = text;
+        pendingPasteLines.value = lineCount;
+      } else {
+        await write(sessionId.value, text);
+      }
       return;
     }
   } catch {
@@ -333,11 +369,187 @@ async function handlePaste() {
 
       // Paste the file path (with quotes in case of spaces)
       await write(sessionId.value, `"${filePath}"`);
+
+      // Show a floating thumbnail so the user can see what they pasted.
+      showImagePreview(rgbaData, size.width, size.height, filePath);
     }
   } catch (e) {
     // No image or failed to save, ignore
     console.error('Failed to paste image:', e);
   }
+}
+
+// Build a small thumbnail from the pasted RGBA pixels and show it as a
+// floating overlay in the pane corner. Auto-dismisses after a few seconds.
+function showImagePreview(
+  rgba: Uint8Array,
+  width: number,
+  height: number,
+  path: string,
+) {
+  try {
+    const source = document.createElement('canvas');
+    source.width = width;
+    source.height = height;
+    const sctx = source.getContext('2d');
+    if (!sctx) return;
+    sctx.putImageData(new ImageData(new Uint8ClampedArray(rgba), width, height), 0, 0);
+
+    // Downscale to a thumbnail bounded by maxDim on its longest side.
+    const maxDim = 180;
+    const scale = Math.min(1, maxDim / Math.max(width, height));
+    const tw = Math.max(1, Math.round(width * scale));
+    const th = Math.max(1, Math.round(height * scale));
+    const thumb = document.createElement('canvas');
+    thumb.width = tw;
+    thumb.height = th;
+    const tctx = thumb.getContext('2d');
+    if (!tctx) return;
+    tctx.drawImage(source, 0, 0, tw, th);
+
+    pastePreviewUrl.value = thumb.toDataURL('image/png');
+    pastePreviewPath = path;
+
+    if (pastePreviewTimer) clearTimeout(pastePreviewTimer);
+    pastePreviewTimer = setTimeout(dismissImagePreview, 6000);
+  } catch (e) {
+    console.error('Failed to build image preview:', e);
+  }
+}
+
+function dismissImagePreview() {
+  pastePreviewUrl.value = null;
+  pastePreviewPath = null;
+  if (pastePreviewTimer) {
+    clearTimeout(pastePreviewTimer);
+    pastePreviewTimer = null;
+  }
+}
+
+// Open the pasted image full-size with the OS default viewer.
+async function openPastedImage() {
+  const path = pastePreviewPath;
+  dismissImagePreview();
+  if (path) {
+    try {
+      await openPath(path);
+    } catch (e) {
+      console.error('Failed to open pasted image:', e);
+    }
+  }
+}
+
+// Detects absolute (C:\…, /usr/…), home (~/…), dot-relative (./…, ../…), and
+// word/word.ext relative file paths, with an optional :line:col suffix.
+const FILE_PATH_RE = /(?<=^|\s)((?:[A-Za-z]:[\\/]|\.\.?[\\/]|~[\\/]|[\\/])[^\s:*?"<>|]*|(?:[\w.\-]+[\\/])+[\w.\-]+\.[A-Za-z0-9]+)(?::(\d+)(?::(\d+))?)?/g;
+
+// Build an xterm link provider that turns file paths in the buffer into
+// clickable links.
+function createFilePathLinkProvider(term: Terminal) {
+  return {
+    provideLinks(y: number, callback: (links: any[] | undefined) => void) {
+      const line = term.buffer.active.getLine(y - 1);
+      if (!line) {
+        callback(undefined);
+        return;
+      }
+      const text = line.translateToString(true);
+      const links: any[] = [];
+      const re = new RegExp(FILE_PATH_RE.source, 'g');
+      let m: RegExpExecArray | null;
+      while ((m = re.exec(text)) !== null) {
+        const full = m[0];
+        const path = m[1];
+        const lineNo = m[2] ? parseInt(m[2], 10) : undefined;
+        links.push({
+          text: full,
+          range: {
+            start: { x: m.index + 1, y },
+            end: { x: m.index + full.length, y },
+          },
+          activate: () => { openFilePathLink(path, lineNo); },
+        });
+      }
+      callback(links.length ? links : undefined);
+    },
+  };
+}
+
+async function currentCwd(): Promise<string | null> {
+  if (!sessionId.value) return null;
+  try {
+    return await invoke<string>('get_terminal_cwd', { sessionId: sessionId.value });
+  } catch {
+    return null;
+  }
+}
+
+async function openFilePathLink(rawPath: string, _lineNo?: number) {
+  try {
+    // Strip trailing punctuation that often abuts a path in prose.
+    let p = rawPath.replace(/[)\]}.,;'"]+$/, '');
+    const isAbsolute = /^[A-Za-z]:[\\/]/.test(p) || /^[\\/]/.test(p) || p.startsWith('~');
+    if (!isAbsolute) {
+      const cwd = await currentCwd();
+      if (!cwd) return;
+      const sep = cwd.includes('\\') ? '\\' : '/';
+      p = cwd.replace(/[\\/]$/, '') + sep + p.replace(/^\.[\\/]/, '');
+    }
+    if (/\.md$/i.test(p) && (window as any).__openMarkdownViewer) {
+      (window as any).__openMarkdownViewer(p);
+      return;
+    }
+    await openPath(p);
+  } catch (e) {
+    console.error('Failed to open path link:', e);
+  }
+}
+
+// Optional per-pane header showing directory + running process.
+const headerCwd = ref('');
+const headerTitle = ref('');
+const headerDir = computed(() => {
+  const p = headerCwd.value;
+  if (!p) return '';
+  const trimmed = p.replace(/[\\/]+$/, '');
+  const parts = trimmed.split(/[\\/]/);
+  return parts[parts.length - 1] || trimmed;
+});
+let headerInterval: ReturnType<typeof setInterval> | null = null;
+
+async function updatePaneHeader() {
+  if (!settingsStore.showPaneHeader || !sessionId.value) return;
+  try {
+    const cwd = await invoke<string>('get_terminal_cwd', { sessionId: sessionId.value });
+    if (cwd) headerCwd.value = cwd;
+  } catch { /* ignore */ }
+}
+
+// True when the viewport is scrolled up into the scrollback (not at live bottom).
+const isScrolledUp = ref(false);
+
+function scrollToLiveBottom() {
+  terminal?.scrollToBottom();
+  isScrolledUp.value = false;
+  terminal?.focus();
+}
+
+// Multi-line paste confirmation state
+const pendingPasteText = ref<string | null>(null);
+const pendingPasteLines = ref(0);
+
+async function confirmPaste() {
+  const text = pendingPasteText.value;
+  pendingPasteText.value = null;
+  if (text && sessionId.value) {
+    await write(sessionId.value, text);
+  }
+  terminal?.focus();
+}
+
+function cancelPaste() {
+  pendingPasteText.value = null;
+  terminal?.focus();
 }
 
 // Handle clipboard copy
@@ -372,6 +584,9 @@ watch(
 // Initialize terminal
 onMounted(async () => {
   if (!terminalRef.value) return;
+
+  // Poll the directory for the optional pane header (cheap, gated by setting).
+  headerInterval = setInterval(updatePaneHeader, 2000);
 
   const reattachId = props.existingSessionId;
   const isReattach = reattachId && layoutStore.isPendingReattach(reattachId);
@@ -418,6 +633,10 @@ onMounted(async () => {
     searchAddon = new SearchAddon();
     terminal.loadAddon(searchAddon);
     setupSearchResultListener();
+
+    // Make file paths in terminal output clickable (opens in the OS default app,
+    // or the in-app markdown viewer for .md files).
+    terminal.registerLinkProvider(createFilePathLinkProvider(terminal));
 
     // Create a wrapper div for the terminal so we can re-parent it later
     xtermElement = document.createElement('div');
@@ -588,12 +807,19 @@ onMounted(async () => {
 
     // Handle title changes
     terminal.onTitleChange((title) => {
+      headerTitle.value = title;
       emit('title-change', title);
     });
 
     // Handle bell (BEL character \x07)
     terminal.onBell(() => {
       handleBell();
+    });
+
+    // Track whether the viewport is scrolled up from the live bottom so we can
+    // show a "jump to bottom" affordance.
+    terminal.onScroll((position) => {
+      isScrolledUp.value = position < (terminal?.buffer.active.baseY ?? 0);
     });
 
     // Intercept paste events at capture phase before xterm handles them
@@ -648,6 +874,24 @@ onMounted(async () => {
     // Handle clipboard copy and let app-level shortcuts bubble up
     terminal.attachCustomKeyEventHandler((event) => {
       if (event.type === 'keydown') {
+        // Scrollback navigation (handled locally, not forwarded to the PTY)
+        if (event.shiftKey && event.code === 'PageUp') {
+          terminal?.scrollPages(-1);
+          return false;
+        }
+        if (event.shiftKey && event.code === 'PageDown') {
+          terminal?.scrollPages(1);
+          return false;
+        }
+        // Ctrl (Windows/Linux) or Cmd (macOS) + Home/End jumps the scrollback.
+        if ((event.ctrlKey || event.metaKey) && event.code === 'Home') {
+          terminal?.scrollToTop();
+          return false;
+        }
+        if ((event.ctrlKey || event.metaKey) && event.code === 'End') {
+          terminal?.scrollToBottom();
+          return false;
+        }
         // Ctrl+V: let the paste event listener handle it (prevents double-paste)
         if (event.ctrlKey && event.code === 'KeyV') {
           return false;
@@ -744,6 +988,9 @@ onMounted(async () => {
 
 // Cleanup on unmount
 onUnmounted(async () => {
+  if (pastePreviewTimer) clearTimeout(pastePreviewTimer);
+  if (headerInterval) clearInterval(headerInterval);
+
   // Unregister session from layout store
   if (props.nodeId) {
     layoutStore.unregisterSession(props.nodeId);
@@ -813,12 +1060,68 @@ defineExpose({ focus, toggleSearch, getBufferText });
       @previous="handleSearchPrevious"
       @close="closeSearch"
     />
+    <div v-if="settingsStore.showPaneHeader" class="pane-header">
+      <span class="pane-header-dir">{{ headerDir || '—' }}</span>
+      <span v-if="headerTitle" class="pane-header-proc">{{ headerTitle }}</span>
+    </div>
+
     <div ref="terminalRef" class="terminal-container"></div>
+
+    <!-- Scroll-locked indicator: jump back to the live bottom -->
+    <Transition name="paste-preview">
+      <button
+        v-if="isScrolledUp"
+        class="scroll-bottom-pill"
+        title="Scrolled up — jump to bottom"
+        @click="scrollToLiveBottom"
+      >
+        <ChevronDownIcon class="w-3 h-3" />
+        <span>Jump to bottom</span>
+      </button>
+    </Transition>
+
+    <!-- Multi-line paste confirmation -->
+    <Transition name="paste-preview">
+      <div v-if="pendingPasteText" class="paste-confirm-backdrop" @click.self="cancelPaste">
+        <div class="paste-confirm">
+          <div class="paste-confirm-title">
+            Paste {{ pendingPasteLines }} lines?
+          </div>
+          <pre class="paste-confirm-body">{{ pendingPasteText }}</pre>
+          <div class="paste-confirm-actions">
+            <button class="paste-confirm-btn" @click="cancelPaste">Cancel</button>
+            <button class="paste-confirm-btn paste-confirm-btn-primary" @click="confirmPaste">
+              Paste
+            </button>
+          </div>
+        </div>
+      </div>
+    </Transition>
+
+    <!-- Floating preview of the most recently pasted image -->
+    <Transition name="paste-preview">
+      <div
+        v-if="pastePreviewUrl"
+        class="paste-preview"
+        title="Open pasted image"
+        @click="openPastedImage"
+      >
+        <img :src="pastePreviewUrl" alt="Pasted image preview" />
+        <button
+          class="paste-preview-close"
+          title="Dismiss"
+          @click.stop="dismissImagePreview"
+        >
+          <XMarkIcon class="w-3 h-3" />
+        </button>
+      </div>
+    </Transition>
   </div>
 </template>
 
 <style scoped>
 .terminal-pane {
+  position: relative;
   width: 100%;
   height: 100%;
   overflow: hidden;
@@ -828,10 +1131,208 @@ defineExpose({ focus, toggleSearch, getBufferText });
   flex-direction: column;
 }
 
+.paste-preview {
+  position: absolute;
+  right: 12px;
+  bottom: 12px;
+  z-index: 20;
+  padding: 4px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-default);
+  border-radius: 4px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.45);
+  cursor: pointer;
+  line-height: 0;
+  transition: transform 0.1s ease, border-color 0.1s ease;
+}
+
+.paste-preview:hover {
+  transform: translateY(-1px);
+  border-color: var(--accent-cyan);
+}
+
+.paste-preview img {
+  display: block;
+  max-width: 180px;
+  max-height: 180px;
+  border-radius: 2px;
+}
+
+.paste-preview-close {
+  position: absolute;
+  top: -7px;
+  right: -7px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  color: var(--text-primary);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-default);
+  border-radius: 50%;
+  cursor: pointer;
+  transition: color 0.1s ease, border-color 0.1s ease;
+}
+
+.paste-preview-close:hover {
+  color: var(--accent-red);
+  border-color: var(--accent-red);
+}
+
+.scroll-bottom-pill {
+  position: absolute;
+  left: 50%;
+  bottom: 12px;
+  transform: translateX(-50%);
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 12px;
+  font-size: 0.65rem;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  color: var(--bg-primary);
+  background: var(--accent-cyan);
+  border: none;
+  border-radius: 999px;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.4);
+  cursor: pointer;
+  transition: opacity 0.1s ease;
+}
+
+.scroll-bottom-pill:hover {
+  opacity: 0.9;
+}
+
+.paste-confirm-backdrop {
+  position: absolute;
+  inset: 0;
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(2px);
+}
+
+.paste-confirm {
+  width: min(440px, 90%);
+  max-height: 80%;
+  display: flex;
+  flex-direction: column;
+  padding: 14px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-default);
+  border-radius: 6px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+}
+
+.paste-confirm-title {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 8px;
+}
+
+.paste-confirm-body {
+  flex: 1;
+  min-height: 0;
+  max-height: 180px;
+  overflow: auto;
+  margin: 0 0 12px;
+  padding: 8px;
+  font-size: 0.7rem;
+  line-height: 1.4;
+  color: var(--text-secondary);
+  background: var(--bg-primary);
+  border: 1px solid var(--border-subtle);
+  border-radius: 4px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.paste-confirm-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.paste-confirm-btn {
+  padding: 5px 14px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-default);
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.1s ease;
+}
+
+.paste-confirm-btn:hover {
+  color: var(--text-primary);
+  border-color: var(--border-strong);
+}
+
+.paste-confirm-btn-primary {
+  color: var(--bg-primary);
+  background: var(--accent-cyan);
+  border-color: var(--accent-cyan);
+}
+
+.paste-confirm-btn-primary:hover {
+  color: var(--bg-primary);
+  opacity: 0.9;
+}
+
+.paste-preview-enter-active,
+.paste-preview-leave-active {
+  transition: opacity 0.15s ease, transform 0.15s ease;
+}
+
+.paste-preview-enter-from,
+.paste-preview-leave-to {
+  opacity: 0;
+  transform: translateY(6px);
+}
+
 .terminal-container {
   width: 100%;
   flex: 1;
   min-height: 0;
+}
+
+.pane-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 20px;
+  min-height: 20px;
+  padding: 0 8px;
+  margin-bottom: 2px;
+  background: var(--bg-primary);
+  border-bottom: 1px solid var(--border-subtle);
+  overflow: hidden;
+}
+
+.pane-header-dir {
+  font-size: 0.6rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.pane-header-proc {
+  font-size: 0.6rem;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .terminal-pane.bell-flash {

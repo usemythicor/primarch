@@ -26,6 +26,7 @@ import SettingsPanel from './components/settings/SettingsPanel.vue';
 import CommandPalette from './components/palette/CommandPalette.vue';
 import GitSidebar from './components/git/GitSidebar.vue';
 import DiffViewer from './components/git/DiffViewer.vue';
+import BranchSelector from './components/git/BranchSelector.vue';
 import MarkdownViewer from './components/viewer/MarkdownViewer.vue';
 import { useLayoutStore } from './stores/layout';
 import { createTerminalNode } from './components/layout/LayoutTree';
@@ -175,6 +176,7 @@ watch(() => settingsStore.availableAiClis, (clis) => {
 }, { immediate: true });
 const gitChangeCount = computed(() => gitStore.changeCount);
 const showDiffViewer = computed(() => gitStore.diffVisible);
+const showBranchSelector = computed(() => gitStore.branchSelectorVisible);
 const gitBranchName = computed(() => gitStore.branchName);
 const gitAhead = computed(() => gitStore.ahead);
 const gitBehind = computed(() => gitStore.behind);
@@ -286,6 +288,25 @@ function handleKeydown(e: KeyboardEvent) {
     layoutStore.focusPreviousPane();
     handled = true;
   }
+  // Alt+Shift+Arrows: Focus pane in spatial direction.
+  // (Shift is required so plain Alt/Option+Arrow stays free for shell word
+  // navigation, which is the default binding on macOS.)
+  else if (e.altKey && e.shiftKey && !mod && e.code === 'ArrowLeft') {
+    layoutStore.focusPaneInDirection('left');
+    handled = true;
+  }
+  else if (e.altKey && e.shiftKey && !mod && e.code === 'ArrowRight') {
+    layoutStore.focusPaneInDirection('right');
+    handled = true;
+  }
+  else if (e.altKey && e.shiftKey && !mod && e.code === 'ArrowUp') {
+    layoutStore.focusPaneInDirection('up');
+    handled = true;
+  }
+  else if (e.altKey && e.shiftKey && !mod && e.code === 'ArrowDown') {
+    layoutStore.focusPaneInDirection('down');
+    handled = true;
+  }
   // Cmd/Ctrl+Shift+S: Toggle workspace manager
   else if (mod && e.shiftKey && e.code === 'KeyS') {
     showSettings.value = false;
@@ -344,6 +365,12 @@ watch(terminalBg, (bg) => {
   document.body.style.background = bg;
 }, { immediate: true });
 
+// Apply window translucency (Windows-only; no-op elsewhere).
+function applyWindowOpacity(opacity: number) {
+  invoke('set_window_opacity', { opacity: Math.round(opacity) }).catch(() => {});
+}
+watch(() => settingsStore.windowOpacity, applyWindowOpacity);
+
 onMounted(async () => {
   window.addEventListener('keydown', handleKeydown, true);
   // Restore saved window size/position before anything renders
@@ -359,10 +386,14 @@ onMounted(async () => {
   (window as any).__openMarkdownViewer = openMarkdownViewer;
   // Start watching for CWD changes to update git
   gitStore.startCwdWatcher();
+  // Auto-name tabs after their terminal's working directory
+  layoutStore.startTabNameWatcher();
   // Track window maximize state and persist window geometry
   isMaximized.value = await appWindow.isMaximized();
   appWindow.onResized(() => { updateMaximizedState(); debouncedSaveWindowState(); });
   appWindow.onMoved(debouncedSaveWindowState);
+  // Apply saved window opacity
+  applyWindowOpacity(settingsStore.windowOpacity);
   // Get app version
   appVersion.value = await getVersion();
   // Check for updates silently on startup
@@ -386,6 +417,14 @@ onMounted(async () => {
     console.warn('Failed to register global shortcut CmdOrCtrl+P:', e);
   }
 
+  // Quake/dropdown toggle — handled entirely in Rust so it can summon the
+  // window even when it's hidden or unfocused.
+  try {
+    await register('CmdOrCtrl+Shift+Backquote', () => {});
+  } catch (e) {
+    console.warn('Failed to register quake shortcut:', e);
+  }
+
   // Listen for global shortcut events from Rust
   globalShortcutUnlisten = await listen<string>('global-shortcut', (event) => {
     if (event.payload.includes('P') && !event.payload.includes('Shift')) {
@@ -402,6 +441,7 @@ onMounted(async () => {
 onUnmounted(async () => {
   window.removeEventListener('keydown', handleKeydown, true);
   gitStore.stopCwdWatcher();
+  layoutStore.stopTabNameWatcher();
   // Unregister event listeners
   if (openDirUnlisten) {
     openDirUnlisten();
@@ -411,6 +451,11 @@ onUnmounted(async () => {
   }
   try {
     await unregister('CmdOrCtrl+P');
+  } catch (e) {
+    // Ignore errors during cleanup
+  }
+  try {
+    await unregister('CmdOrCtrl+Shift+Backquote');
   } catch (e) {
     // Ignore errors during cleanup
   }
@@ -531,6 +576,7 @@ onUnmounted(async () => {
         <div
           v-for="tab in layoutStore.tabs"
           :key="tab.id"
+          :data-tab-id="tab.id"
           class="absolute inset-0"
           :class="{ 'pointer-events-none': tab.id !== layoutStore.activeTabId }"
           :style="{ visibility: tab.id === layoutStore.activeTabId ? 'visible' : 'hidden' }"
@@ -557,6 +603,12 @@ onUnmounted(async () => {
 
       <!-- Modals -->
       <Teleport to="body">
+        <!-- Branch Selector -->
+        <BranchSelector
+          v-if="showBranchSelector"
+          @close="gitStore.hideBranchSelector()"
+        />
+
         <!-- Command Palette -->
         <Transition
           enter-active-class="transition duration-100 ease-out"
@@ -653,23 +705,37 @@ onUnmounted(async () => {
     >
       <div class="flex items-center gap-4">
         <!-- Git branch info -->
-        <div
-          class="flex items-center gap-2 cursor-pointer hover:opacity-80"
-          @click="gitStore.toggleSidebar()"
-          title="Source Control (Ctrl+Shift+G)"
-        >
-          <CodeBracketIcon class="w-3 h-3" style="color: var(--text-muted);" />
+        <div class="flex items-center gap-2">
+          <CodeBracketIcon
+            class="w-3 h-3 cursor-pointer hover:opacity-80"
+            style="color: var(--text-muted);"
+            title="Source Control (Ctrl+Shift+G)"
+            @click="gitStore.toggleSidebar()"
+          />
           <template v-if="gitHasRepo">
-            <span class="text-label" style="color: var(--text-secondary);">{{ gitBranchName || 'No branch' }}</span>
+            <button
+              class="flex items-center gap-1 hover:opacity-80"
+              title="Switch branch"
+              @click="gitStore.showBranchSelector()"
+            >
+              <span class="text-label" style="color: var(--text-secondary);">{{ gitBranchName || 'No branch' }}</span>
+              <svg class="w-2.5 h-2.5" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" style="color: var(--text-muted);"><path d="M3 4.5 6 7.5 9 4.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </button>
             <span
               v-if="gitChangeCount > 0"
-              class="px-1 rounded text-label"
+              class="px-1 rounded text-label cursor-pointer"
               style="background: var(--accent-cyan); color: var(--bg-primary); font-size: 0.55rem;"
+              @click="gitStore.toggleSidebar()"
             >
               {{ gitChangeCount }}
             </span>
           </template>
-          <span v-else class="text-label" style="color: var(--text-muted);">No Repository</span>
+          <span
+            v-else
+            class="text-label cursor-pointer hover:opacity-80"
+            style="color: var(--text-muted);"
+            @click="gitStore.toggleSidebar()"
+          >No Repository</span>
         </div>
 
         <!-- Pull / Push — grouped tightly -->

@@ -18,10 +18,19 @@ function createTab(name?: string, layout?: LayoutNode): Tab {
   return {
     id: crypto.randomUUID(),
     name: name || 'Terminal',
+    autoName: true,
     layout: node,
     sessionRegistry: new Map(),
     pendingReattach: new Set(),
   };
+}
+
+/** Last path segment of a working directory, used as the auto tab name. */
+function dirBasename(path: string): string {
+  if (!path) return '';
+  const trimmed = path.replace(/[\\/]+$/, '');
+  const parts = trimmed.split(/[\\/]/);
+  return parts[parts.length - 1] || trimmed;
 }
 
 export const useLayoutStore = defineStore('layout', () => {
@@ -120,7 +129,11 @@ export const useLayoutStore = defineStore('layout', () => {
 
   function renameTab(tabId: string, name: string) {
     const tab = tabs.value.find((t) => t.id === tabId);
-    if (tab) tab.name = name;
+    if (tab) {
+      tab.name = name;
+      // A manual rename pins the name — stop auto-tracking the directory.
+      tab.autoName = false;
+    }
   }
 
   function moveTab(fromIndex: number, toIndex: number) {
@@ -371,6 +384,47 @@ export const useLayoutStore = defineStore('layout', () => {
     activePane.value = terminals[prevIndex]?.id;
   }
 
+  // Focus the nearest pane in a spatial direction. Uses on-screen geometry so
+  // it behaves intuitively in arbitrary split layouts, not just a flat cycle.
+  function focusPaneInDirection(direction: 'left' | 'right' | 'up' | 'down') {
+    if (!activePane.value) return;
+    // Scope to the active tab so hidden tabs' panes don't interfere.
+    const scope = document.querySelector(`[data-tab-id="${activeTabId.value}"]`) || document;
+    const panes = Array.from(
+      scope.querySelectorAll<HTMLElement>('[data-node-id]')
+    )
+      .map((el) => ({ id: el.getAttribute('data-node-id')!, rect: el.getBoundingClientRect() }))
+      .filter((p) => p.id && p.rect.width > 0 && p.rect.height > 0);
+
+    const current = panes.find((p) => p.id === activePane.value);
+    if (!current) return;
+
+    const cx = current.rect.left + current.rect.width / 2;
+    const cy = current.rect.top + current.rect.height / 2;
+
+    let best: { id: string; dist: number } | null = null;
+    for (const p of panes) {
+      if (p.id === current.id) continue;
+      const px = p.rect.left + p.rect.width / 2;
+      const py = p.rect.top + p.rect.height / 2;
+      const dx = px - cx;
+      const dy = py - cy;
+
+      // Candidate must lie predominantly in the requested direction.
+      let inDir = false;
+      if (direction === 'left') inDir = dx < 0 && Math.abs(dx) >= Math.abs(dy);
+      else if (direction === 'right') inDir = dx > 0 && Math.abs(dx) >= Math.abs(dy);
+      else if (direction === 'up') inDir = dy < 0 && Math.abs(dy) >= Math.abs(dx);
+      else if (direction === 'down') inDir = dy > 0 && Math.abs(dy) >= Math.abs(dx);
+      if (!inDir) continue;
+
+      const dist = Math.hypot(dx, dy);
+      if (!best || dist < best.dist) best = { id: p.id, dist };
+    }
+
+    if (best) activePane.value = best.id;
+  }
+
   // Navigate between tabs
   function nextTab() {
     const index = tabs.value.findIndex((t) => t.id === activeTabId.value);
@@ -443,6 +497,47 @@ export const useLayoutStore = defineStore('layout', () => {
     searchToggleSignal.value++;
   }
 
+  // Auto-naming — tabs whose name hasn't been pinned by the user track the
+  // working directory of their representative terminal.
+  let tabNameInterval: ReturnType<typeof setInterval> | null = null;
+
+  // Pick the terminal that best represents a tab's "current" directory: the
+  // globally-active pane if it lives in this tab, otherwise the first terminal.
+  function representativeTerminal(tab: Tab) {
+    const terminals = getAllTerminals(tab.layout);
+    if (terminals.length === 0) return undefined;
+    return terminals.find((t) => t.id === activePane.value) || terminals[0];
+  }
+
+  async function refreshTabNames() {
+    for (const tab of tabs.value) {
+      if (!tab.autoName) continue;
+      const rep = representativeTerminal(tab);
+      const sessionId = rep?.id ? tab.sessionRegistry.get(rep.id) : undefined;
+      if (!sessionId) continue;
+      try {
+        const cwd = await invoke<string>('get_terminal_cwd', { sessionId });
+        const name = dirBasename(cwd);
+        if (name && tab.name !== name) tab.name = name;
+      } catch {
+        // Session not ready or command failed — keep the existing name.
+      }
+    }
+  }
+
+  function startTabNameWatcher() {
+    if (tabNameInterval) return;
+    tabNameInterval = setInterval(refreshTabNames, 1500);
+    refreshTabNames();
+  }
+
+  function stopTabNameWatcher() {
+    if (tabNameInterval) {
+      clearInterval(tabNameInterval);
+      tabNameInterval = null;
+    }
+  }
+
   return {
     // State
     tabs,
@@ -479,6 +574,7 @@ export const useLayoutStore = defineStore('layout', () => {
     getLayout,
     focusNextPane,
     focusPreviousPane,
+    focusPaneInDirection,
 
     // Bell notifications
     bellTabs,
@@ -498,6 +594,10 @@ export const useLayoutStore = defineStore('layout', () => {
     // Search
     searchToggleSignal,
     triggerSearchToggle,
+
+    // Auto-naming
+    startTabNameWatcher,
+    stopTabNameWatcher,
 
     // Session registry
     registerSession,

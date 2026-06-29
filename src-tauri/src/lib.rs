@@ -1112,6 +1112,61 @@ fn is_shell_integration_installed() -> bool {
     shell_integration::platform::is_installed()
 }
 
+/// Apply window translucency on Windows via a layered window.
+#[cfg(windows)]
+fn apply_window_opacity(window: &tauri::WebviewWindow, opacity: u8) -> Result<(), String> {
+    use windows::Win32::Foundation::{COLORREF, HWND};
+    use windows::Win32::UI::WindowsAndMessaging::{
+        GetWindowLongPtrW, SetLayeredWindowAttributes, SetWindowLongPtrW, GWL_EXSTYLE, LWA_ALPHA,
+        WS_EX_LAYERED,
+    };
+
+    // tauri's hwnd() returns an HWND from a different `windows` crate version,
+    // so rebuild our crate's HWND from the raw pointer.
+    let raw = window.hwnd().map_err(|e| e.to_string())?;
+    let hwnd = HWND(raw.0 as *mut core::ffi::c_void);
+    let alpha = ((opacity.min(100) as u32) * 255 / 100) as u8;
+    unsafe {
+        let ex_style = GetWindowLongPtrW(hwnd, GWL_EXSTYLE);
+        SetWindowLongPtrW(hwnd, GWL_EXSTYLE, ex_style | WS_EX_LAYERED.0 as isize);
+        SetLayeredWindowAttributes(hwnd, COLORREF(0), alpha, LWA_ALPHA)
+            .map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
+/// Apply window translucency on macOS via NSWindow.setAlphaValue.
+#[cfg(target_os = "macos")]
+fn apply_window_opacity(window: &tauri::WebviewWindow, opacity: u8) -> Result<(), String> {
+    use objc::runtime::Object;
+    use objc::{msg_send, sel, sel_impl};
+
+    let ns_window = window.ns_window().map_err(|e| e.to_string())? as *mut Object;
+    let alpha: f64 = (opacity.min(100) as f64) / 100.0;
+    unsafe {
+        let _: () = msg_send![ns_window, setAlphaValue: alpha];
+    }
+    Ok(())
+}
+
+#[cfg(not(any(windows, target_os = "macos")))]
+fn apply_window_opacity(_window: &tauri::WebviewWindow, _opacity: u8) -> Result<(), String> {
+    Ok(())
+}
+
+/// Set the main window's translucency (0-100). Implemented on Windows and
+/// macOS; a no-op on other platforms. Runs on the main thread because the
+/// underlying AppKit/Win32 calls must happen there.
+#[tauri::command]
+fn set_window_opacity(window: tauri::WebviewWindow, opacity: u8) -> Result<(), String> {
+    let win = window.clone();
+    window
+        .run_on_main_thread(move || {
+            let _ = apply_window_opacity(&win, opacity);
+        })
+        .map_err(|e| e.to_string())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     // Parse --cwd from launch arguments (consumed by the first create_terminal).
@@ -1134,8 +1189,27 @@ pub fn run() {
             tauri_plugin_global_shortcut::Builder::new()
                 .with_handler(|app, shortcut, event| {
                     if event.state() == tauri_plugin_global_shortcut::ShortcutState::Pressed {
-                        // Only emit when our window is focused so we don't steal
-                        // the shortcut from other applications.
+                        use tauri_plugin_global_shortcut::{Code, Modifiers};
+                        // Quake/dropdown toggle (Ctrl/Cmd+Shift+`). Works even when
+                        // the window is unfocused so it can summon the window.
+                        let is_quake = shortcut.matches(Modifiers::CONTROL | Modifiers::SHIFT, Code::Backquote)
+                            || shortcut.matches(Modifiers::SUPER | Modifiers::SHIFT, Code::Backquote);
+                        if is_quake {
+                            if let Some(w) = app.get_webview_window("main") {
+                                let visible = w.is_visible().unwrap_or(true);
+                                let focused = w.is_focused().unwrap_or(false);
+                                if visible && focused {
+                                    let _ = w.hide();
+                                } else {
+                                    let _ = w.unminimize();
+                                    let _ = w.show();
+                                    let _ = w.set_focus();
+                                }
+                            }
+                            return;
+                        }
+                        // Other shortcuts: only emit when our window is focused so
+                        // we don't steal the shortcut from other applications.
                         if let Some(w) = app.get_webview_window("main") {
                             if w.is_focused().unwrap_or(false) {
                                 let _ = app.emit("global-shortcut", shortcut.to_string());
@@ -1228,6 +1302,8 @@ pub fn run() {
             install_shell_integration,
             uninstall_shell_integration,
             is_shell_integration_installed,
+            // Window commands
+            set_window_opacity,
         ])
         .setup(|_app| {
             // On Windows, disable decorations for the custom title bar.

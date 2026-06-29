@@ -21,7 +21,7 @@ import { themes } from '../../themes/presets';
 import { fuzzyMatch } from '../../utils/fuzzyMatch';
 import { getRecentDirectories, addRecentDirectory } from '../../utils/recentDirectories';
 import { getAliases, saveAlias, deleteAlias, type CommandAlias } from '../../utils/aliases';
-import { CommandLineIcon, PlusIcon, TrashIcon, DocumentTextIcon, ArrowDownTrayIcon, ViewfinderCircleIcon } from '@heroicons/vue/24/outline';
+import { CommandLineIcon, PlusIcon, TrashIcon, DocumentTextIcon, ArrowDownTrayIcon, ViewfinderCircleIcon, FolderOpenIcon } from '@heroicons/vue/24/outline';
 
 interface DirEntry {
   name: string;
@@ -218,7 +218,27 @@ const staticCommands: PaletteItem[] = [
     action: () => enterCreateAlias(),
     score: 0,
   },
+  {
+    id: 'reveal-folder',
+    label: 'Open Folder in File Manager',
+    description: 'Reveal the active terminal\'s directory',
+    icon: FolderOpenIcon,
+    action: () => { revealActiveFolder(); close(); },
+    score: 0,
+  },
 ];
+
+async function revealActiveFolder() {
+  const activeId = layoutStore.activePane;
+  if (!activeId) return;
+  const sessionId = layoutStore.getSessionId(activeId);
+  if (!sessionId) return;
+  try {
+    const cwd = await invoke<string>('get_terminal_cwd', { sessionId });
+    const { openPath } = await import('@tauri-apps/plugin-opener');
+    await openPath(cwd);
+  } catch { /* ignore */ }
+}
 
 const filteredItems = computed<PaletteItem[]>(() => {
   const q = query.value.trim();

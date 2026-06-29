@@ -99,6 +99,10 @@ const contextMenuItems = computed<ContextMenuItem[]>(() => {
     },
     { separator: true as const },
     {
+      label: 'Open Folder in File Manager',
+      action: () => revealPaneFolder(),
+    },
+    {
       label: 'Save Output',
       action: () => exportTerminalOutput(),
     },
@@ -115,6 +119,18 @@ const contextMenuItems = computed<ContextMenuItem[]>(() => {
     },
   ];
 });
+
+async function revealPaneFolder() {
+  const nodeId = props.node.id;
+  if (!nodeId) return;
+  const sessionId = layoutStore.getSessionId(nodeId);
+  if (!sessionId) return;
+  try {
+    const cwd = await invoke<string>('get_terminal_cwd', { sessionId });
+    const { openPath } = await import('@tauri-apps/plugin-opener');
+    await openPath(cwd);
+  } catch { /* ignore */ }
+}
 
 async function exportTerminalOutput() {
   const text = terminalPaneRef.value?.getBufferText();
@@ -195,9 +211,11 @@ onUnmounted(() => window.removeEventListener('primarch-export-output', onExportE
   <div
     v-else-if="isTerminal"
     class="terminal-wrapper h-full w-full relative"
+    :data-node-id="node.id"
     :class="{
       'pane-active': layoutStore.activePane === node.id,
       'pane-zoomed': layoutStore.zoomedPaneId === node.id,
+      'pane-dim': settingsStore.dimInactivePanes,
     }"
     :style="{ background: terminalBg }"
     @click="handleFocus"
@@ -229,6 +247,13 @@ onUnmounted(() => window.removeEventListener('primarch-export-output', onExportE
 <style scoped>
 .terminal-wrapper {
   outline: none;
+}
+
+/* Dim panes that aren't focused so the active one stands out. The sole pane in
+   a tab is always active, so single-pane tabs are never dimmed. */
+.terminal-wrapper.pane-dim:not(.pane-active) {
+  opacity: 0.55;
+  transition: opacity 0.15s ease;
 }
 
 .terminal-wrapper.pane-active::after {
