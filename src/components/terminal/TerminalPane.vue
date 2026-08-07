@@ -576,6 +576,14 @@ async function handleCopy(text: string) {
   }
 }
 
+// Copy the current selection. Exposed for the pane context menu, which cannot
+// use document.execCommand('copy') — xterm draws its selection in its own
+// overlay, so there is no document selection for the browser to copy.
+function copySelection() {
+  const selection = terminal?.getSelection();
+  if (selection) handleCopy(selection);
+}
+
 // Watch for theme/settings changes
 watch(
   () => settingsStore.terminalOptions,
@@ -1056,7 +1064,7 @@ function getBufferText(): string {
   return lines.join('\n');
 }
 
-defineExpose({ focus, toggleSearch, getBufferText });
+defineExpose({ focus, toggleSearch, getBufferText, paste: handlePaste, copySelection });
 </script>
 
 <template>
