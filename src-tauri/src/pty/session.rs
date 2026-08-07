@@ -139,7 +139,7 @@ precmd_functions+=(__primarch_precmd)
         // Set environment variables for shell integration (OSC sequences)
         // This enables PowerShell 7.2+ to emit OSC 9;9 sequences with current directory
         cmd.env("TERM_PROGRAM", "Primarch");
-        cmd.env("TERM_PROGRAM_VERSION", "0.1.0");
+        cmd.env("TERM_PROGRAM_VERSION", env!("CARGO_PKG_VERSION"));
 
         // Set TERM so the shell knows terminal capabilities (fixes delete key, etc.)
         cmd.env("TERM", "xterm-256color");
