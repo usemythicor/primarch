@@ -145,6 +145,14 @@ watch(() => layoutStore.searchToggleSignal, () => {
   }
 });
 
+// Take keyboard focus when asked (app startup, window regaining OS focus).
+// Only the active pane responds, and never while its search bar is open.
+watch(() => layoutStore.paneFocusSignal, () => {
+  if (!props.nodeId || layoutStore.activePane !== props.nodeId) return;
+  if (showSearch.value) return;
+  terminal?.focus();
+});
+
 // Refit terminal when its tab becomes visible after a tab switch
 watch(() => layoutStore.tabSwitchSignal, () => {
   if (!props.nodeId || !sessionId.value) return;
@@ -569,12 +577,21 @@ watch(
       terminal.options.theme = options.theme;
       terminal.options.fontSize = options.fontSize;
       terminal.options.fontFamily = options.fontFamily;
+      terminal.options.lineHeight = options.lineHeight;
+      terminal.options.letterSpacing = options.letterSpacing;
+      terminal.options.fontWeight = options.fontWeight;
+      terminal.options.fontWeightBold = options.fontWeightBold;
+      terminal.options.minimumContrastRatio = options.minimumContrastRatio;
       terminal.options.cursorBlink = options.cursorBlink;
       terminal.options.cursorStyle = options.cursorStyle;
 
-      // Refit after font size change
+      // Refit — font size, line height and letter spacing all change cell metrics
       if (fitAddon) {
         fitAddon.fit();
+        const dimensions = fitAddon.proposeDimensions();
+        if (sessionId.value && dimensions && dimensions.cols > 0 && dimensions.rows > 0) {
+          resize(sessionId.value, dimensions.cols, dimensions.rows);
+        }
       }
     }
   },
@@ -617,6 +634,11 @@ onMounted(async () => {
       cursorStyle: options.cursorStyle,
       fontSize: options.fontSize,
       fontFamily: options.fontFamily,
+      lineHeight: options.lineHeight,
+      letterSpacing: options.letterSpacing,
+      fontWeight: options.fontWeight,
+      fontWeightBold: options.fontWeightBold,
+      minimumContrastRatio: options.minimumContrastRatio,
       theme: options.theme,
       allowProposedApi: true,
     });
@@ -931,6 +953,12 @@ onMounted(async () => {
   } catch (error) {
     // Display error in the terminal itself so user can see it
     terminal.writeln(`\x1b[31mFailed to create terminal session: ${error}\x1b[0m`);
+  }
+
+  // Take keyboard focus on mount if this is the active pane, so the user can
+  // type immediately instead of having to click into the terminal first.
+  if (props.nodeId && layoutStore.activePane === props.nodeId) {
+    requestAnimationFrame(() => terminal?.focus());
   }
 
   // Handle resize - guard against zero-size containers during maximize/restore animations

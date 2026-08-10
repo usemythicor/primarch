@@ -9,11 +9,26 @@ const STORAGE_KEY = 'primarch-settings';
 export type AiProvider = 'none' | 'api' | 'claude' | 'codex';
 export type MarkdownRenderingMode = 'auto' | 'always' | 'never';
 export type BellStyle = 'none' | 'visual' | 'sound' | 'both';
+/** xterm accepts 'normal'/'bold' or a numeric CSS weight. */
+export type FontWeight = 'normal' | 'bold' | '100' | '200' | '300' | '400' | '500' | '600' | '700' | '800' | '900';
+
+/** Contrast floor applied to ANSI colors, in WCAG ratio terms. 1 disables it. */
+export const contrastRatioOptions = [
+  { value: 1, label: 'Off', hint: 'Use theme colors exactly as defined' },
+  { value: 3, label: '3:1', hint: 'Readable for large text (WCAG AA large)' },
+  { value: 4.5, label: '4.5:1', hint: 'WCAG AA — recommended' },
+  { value: 7, label: '7:1', hint: 'WCAG AAA — maximum legibility' },
+] as const;
 
 interface Settings {
   themeId: string;
   fontSize: number;
   fontFamily: string;
+  lineHeight: number;
+  letterSpacing: number;
+  fontWeight: FontWeight;
+  fontWeightBold: FontWeight;
+  minimumContrastRatio: number;
   cursorBlink: boolean;
   cursorStyle: 'block' | 'underline' | 'bar';
   accentColor: string;
@@ -50,6 +65,13 @@ const defaultSettings: Settings = {
   themeId: 'dracula',
   fontSize: 14,
   fontFamily: "'Cascadia Code', 'Fira Code', 'JetBrains Mono', 'SF Mono', Menlo, Consolas, monospace",
+  // 1.2 gives rows a little breathing room without costing a meaningful number
+  // of visible lines; xterm's own default is a tighter 1.0.
+  lineHeight: 1.2,
+  letterSpacing: 0,
+  fontWeight: 'normal',
+  fontWeightBold: 'bold',
+  minimumContrastRatio: 1,
   cursorBlink: true,
   cursorStyle: 'block',
   accentColor: 'cyan',
@@ -64,6 +86,9 @@ const defaultSettings: Settings = {
   windowOpacity: 100,
 };
 
+/** The stock font stack, exported so the picker can offer it as "System default". */
+export const defaultFontFamily = defaultSettings.fontFamily;
+
 export const useSettingsStore = defineStore('settings', () => {
   // Load settings from localStorage
   const savedSettings = loadSettings();
@@ -72,6 +97,11 @@ export const useSettingsStore = defineStore('settings', () => {
   const themeId = ref(savedSettings.themeId);
   const fontSize = ref(savedSettings.fontSize);
   const fontFamily = ref(savedSettings.fontFamily);
+  const lineHeight = ref(savedSettings.lineHeight);
+  const letterSpacing = ref(savedSettings.letterSpacing);
+  const fontWeight = ref<FontWeight>(savedSettings.fontWeight);
+  const fontWeightBold = ref<FontWeight>(savedSettings.fontWeightBold);
+  const minimumContrastRatio = ref(savedSettings.minimumContrastRatio);
   const cursorBlink = ref(savedSettings.cursorBlink);
   const cursorStyle = ref(savedSettings.cursorStyle);
   const accentColor = ref(savedSettings.accentColor);
@@ -147,6 +177,11 @@ export const useSettingsStore = defineStore('settings', () => {
   const terminalOptions = computed(() => ({
     fontSize: fontSize.value,
     fontFamily: fontFamily.value,
+    lineHeight: lineHeight.value,
+    letterSpacing: letterSpacing.value,
+    fontWeight: fontWeight.value,
+    fontWeightBold: fontWeightBold.value,
+    minimumContrastRatio: minimumContrastRatio.value,
     cursorBlink: cursorBlink.value,
     cursorStyle: cursorStyle.value,
     theme: {
@@ -176,6 +211,15 @@ export const useSettingsStore = defineStore('settings', () => {
   // Computed
   const isLightTheme = computed(() => currentTheme.value.light ?? false);
 
+  /** First family in the CSS stack, unquoted — what the font picker displays. */
+  const fontFamilyName = computed(() => {
+    const first = fontFamily.value.split(',')[0]?.trim() ?? '';
+    return first.replace(/^['"]|['"]$/g, '');
+  });
+
+  /** True while the untouched stock stack is in use, rather than a chosen family. */
+  const usingDefaultFont = computed(() => fontFamily.value === defaultSettings.fontFamily);
+
   // Actions
   function setTheme(id: string) {
     const theme = getThemeById(id);
@@ -191,6 +235,43 @@ export const useSettingsStore = defineStore('settings', () => {
 
   function setFontFamily(family: string) {
     fontFamily.value = family;
+  }
+
+  /**
+   * Select a single installed family by name. Stored as a CSS stack with a
+   * generic fallback so a font that fails to load still renders fixed-pitch.
+   */
+  function setFontFamilyName(family: string) {
+    if (!family) {
+      fontFamily.value = defaultSettings.fontFamily;
+      return;
+    }
+    // Family names contain spaces, so they must be quoted; pick a quote style
+    // the name itself doesn't use.
+    const quoted = family.includes("'") ? `"${family}"` : `'${family}'`;
+    fontFamily.value = `${quoted}, monospace`;
+  }
+
+  function setLineHeight(value: number) {
+    // Round to one decimal so the slider can't persist float noise.
+    lineHeight.value = Math.max(1, Math.min(2, Math.round(value * 10) / 10));
+  }
+
+  function setLetterSpacing(value: number) {
+    // xterm spaces characters in whole pixels; fractions are ignored.
+    letterSpacing.value = Math.max(0, Math.min(4, Math.round(value)));
+  }
+
+  function setFontWeight(weight: FontWeight) {
+    fontWeight.value = weight;
+  }
+
+  function setFontWeightBold(weight: FontWeight) {
+    fontWeightBold.value = weight;
+  }
+
+  function setMinimumContrastRatio(ratio: number) {
+    minimumContrastRatio.value = Math.max(1, Math.min(21, ratio));
   }
 
   function setCursorBlink(blink: boolean) {
@@ -263,6 +344,11 @@ export const useSettingsStore = defineStore('settings', () => {
     themeId.value = defaultSettings.themeId;
     fontSize.value = defaultSettings.fontSize;
     fontFamily.value = defaultSettings.fontFamily;
+    lineHeight.value = defaultSettings.lineHeight;
+    letterSpacing.value = defaultSettings.letterSpacing;
+    fontWeight.value = defaultSettings.fontWeight;
+    fontWeightBold.value = defaultSettings.fontWeightBold;
+    minimumContrastRatio.value = defaultSettings.minimumContrastRatio;
     cursorBlink.value = defaultSettings.cursorBlink;
     cursorStyle.value = defaultSettings.cursorStyle;
     accentColor.value = defaultSettings.accentColor;
@@ -275,12 +361,17 @@ export const useSettingsStore = defineStore('settings', () => {
 
   // Auto-save settings
   watch(
-    [themeId, fontSize, fontFamily, cursorBlink, cursorStyle, accentColor, anthropicApiKey, aiProvider, markdownRendering, bellStyle, timestampPrompt, dimInactivePanes, showPaneHeader, notifyCommandFinish, windowOpacity],
+    [themeId, fontSize, fontFamily, lineHeight, letterSpacing, fontWeight, fontWeightBold, minimumContrastRatio, cursorBlink, cursorStyle, accentColor, anthropicApiKey, aiProvider, markdownRendering, bellStyle, timestampPrompt, dimInactivePanes, showPaneHeader, notifyCommandFinish, windowOpacity],
     () => {
       saveSettings({
         themeId: themeId.value,
         fontSize: fontSize.value,
         fontFamily: fontFamily.value,
+        lineHeight: lineHeight.value,
+        letterSpacing: letterSpacing.value,
+        fontWeight: fontWeight.value,
+        fontWeightBold: fontWeightBold.value,
+        minimumContrastRatio: minimumContrastRatio.value,
         cursorBlink: cursorBlink.value,
         cursorStyle: cursorStyle.value,
         accentColor: accentColor.value,
@@ -303,6 +394,11 @@ export const useSettingsStore = defineStore('settings', () => {
     themeId,
     fontSize,
     fontFamily,
+    lineHeight,
+    letterSpacing,
+    fontWeight,
+    fontWeightBold,
+    minimumContrastRatio,
     cursorBlink,
     cursorStyle,
     accentColor,
@@ -322,11 +418,19 @@ export const useSettingsStore = defineStore('settings', () => {
     availableThemes,
     terminalOptions,
     isLightTheme,
+    fontFamilyName,
+    usingDefaultFont,
 
     // Actions
     setTheme,
     setFontSize,
     setFontFamily,
+    setFontFamilyName,
+    setLineHeight,
+    setLetterSpacing,
+    setFontWeight,
+    setFontWeightBold,
+    setMinimumContrastRatio,
     setCursorBlink,
     setCursorStyle,
     setAccentColor,

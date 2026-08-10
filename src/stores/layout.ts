@@ -497,6 +497,13 @@ export const useLayoutStore = defineStore('layout', () => {
     searchToggleSignal.value++;
   }
 
+  // Pane focus signal — incremented to ask the active TerminalPane to take
+  // keyboard focus (startup, window regaining focus, quake toggle).
+  const paneFocusSignal = ref(0);
+  function requestPaneFocus() {
+    paneFocusSignal.value++;
+  }
+
   // Auto-naming — tabs whose name hasn't been pinned by the user track the
   // working directory of their representative terminal.
   let tabNameInterval: ReturnType<typeof setInterval> | null = null;
@@ -594,6 +601,10 @@ export const useLayoutStore = defineStore('layout', () => {
     // Search
     searchToggleSignal,
     triggerSearchToggle,
+
+    // Focus
+    paneFocusSignal,
+    requestPaneFocus,
 
     // Auto-naming
     startTabNameWatcher,

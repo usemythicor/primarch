@@ -1112,6 +1112,38 @@ fn is_shell_integration_installed() -> bool {
     shell_integration::platform::is_installed()
 }
 
+/// Installed monospace font families, resolved once and cached for the process.
+static MONOSPACE_FONTS: std::sync::OnceLock<Vec<String>> = std::sync::OnceLock::new();
+
+/// List installed monospace font families, sorted case-insensitively.
+///
+/// Scanning the system font directories parses every installed font file, so the
+/// result is cached — the font set does not meaningfully change while the app runs.
+#[tauri::command]
+fn list_monospace_fonts() -> Vec<String> {
+    MONOSPACE_FONTS
+        .get_or_init(|| {
+            let mut db = fontdb::Database::new();
+            db.load_system_fonts();
+
+            let mut families: Vec<String> = db
+                .faces()
+                .filter(|face| face.monospaced)
+                .filter_map(|face| face.families.first().map(|(name, _)| name.clone()))
+                // Windows registers vertical-writing variants as "@Family"; they
+                // render sideways and are never what someone wants in a terminal.
+                .filter(|name| !name.starts_with('@') && !name.is_empty())
+                .collect();
+
+            families.sort_by_key(|name| name.to_lowercase());
+            // One entry per family, not per face — a family with regular/bold/italic
+            // faces would otherwise appear several times.
+            families.dedup_by(|a, b| a.eq_ignore_ascii_case(b));
+            families
+        })
+        .clone()
+}
+
 /// Apply window translucency on Windows via a layered window.
 #[cfg(windows)]
 fn apply_window_opacity(window: &tauri::WebviewWindow, opacity: u8) -> Result<(), String> {
@@ -1304,6 +1336,8 @@ pub fn run() {
             is_shell_integration_installed,
             // Window commands
             set_window_opacity,
+            // Font commands
+            list_monospace_fonts,
         ])
         .setup(|_app| {
             // On Windows, disable decorations for the custom title bar.
@@ -1312,6 +1346,18 @@ pub fn run() {
             {
                 if let Some(window) = _app.get_webview_window("main") {
                     let _ = window.set_decorations(false);
+                    // Restyling the window after creation can leave the WebView2
+                    // child without keyboard focus even though the window is in
+                    // the foreground — the app then ignores input until you click
+                    // away and back. Re-assert focus once the style change settles.
+                    let w = window.clone();
+                    std::thread::spawn(move || {
+                        std::thread::sleep(std::time::Duration::from_millis(200));
+                        let target = w.clone();
+                        let _ = w.run_on_main_thread(move || {
+                            let _ = target.set_focus();
+                        });
+                    });
                 }
             }
 

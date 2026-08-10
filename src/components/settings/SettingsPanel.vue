@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue';
+import { computed, nextTick, ref } from 'vue';
 import {
   XMarkIcon,
   SwatchIcon,
@@ -12,7 +12,8 @@ import {
   ComputerDesktopIcon,
 } from '@heroicons/vue/24/outline';
 import { invoke } from '@tauri-apps/api/core';
-import { useSettingsStore, accentPresets } from '../../stores/settings';
+import { useSettingsStore, accentPresets, contrastRatioOptions } from '../../stores/settings';
+import type { FontWeight } from '../../stores/settings';
 
 const emit = defineEmits<{
   (e: 'close'): void;
@@ -58,9 +59,76 @@ const lightThemes = computed(() => themes.value.filter(t => t.light));
 const currentThemeId = computed(() => settingsStore.themeId);
 const currentTheme = computed(() => settingsStore.currentTheme);
 const fontSize = computed(() => settingsStore.fontSize);
+const lineHeight = computed(() => settingsStore.lineHeight);
+const letterSpacing = computed(() => settingsStore.letterSpacing);
+const fontWeight = computed(() => settingsStore.fontWeight);
+const fontWeightBold = computed(() => settingsStore.fontWeightBold);
+const minimumContrastRatio = computed(() => settingsStore.minimumContrastRatio);
 const cursorStyle = computed(() => settingsStore.cursorStyle);
+
+// Weights offered in the UI. xterm accepts the full 100–900 range, but these
+// three cover thin/regular/medium without needing a numeric input.
+const weightOptions: { value: FontWeight; label: string }[] = [
+  { value: '300', label: 'Light' },
+  { value: 'normal', label: 'Normal' },
+  { value: '500', label: 'Medium' },
+];
+const boldWeightOptions: { value: FontWeight; label: string }[] = [
+  { value: '600', label: 'Semi' },
+  { value: 'bold', label: 'Bold' },
+  { value: '800', label: 'Heavy' },
+];
 const cursorBlink = computed(() => settingsStore.cursorBlink);
 const currentAccent = computed(() => settingsStore.accentColor);
+
+// Font family picker — families are enumerated by the backend on first open.
+const showFontPicker = ref(false);
+const fontSearchRef = ref<HTMLInputElement | null>(null);
+const fonts = ref<string[]>([]);
+const fontsLoading = ref(false);
+const fontsFailed = ref(false);
+const fontSearch = ref('');
+const fontFamilyName = computed(() => settingsStore.fontFamilyName);
+const usingDefaultFont = computed(() => settingsStore.usingDefaultFont);
+
+async function loadFonts() {
+  if (fonts.value.length > 0 || fontsLoading.value) return;
+  fontsLoading.value = true;
+  fontsFailed.value = false;
+  try {
+    fonts.value = await invoke<string[]>('list_monospace_fonts');
+  } catch {
+    fontsFailed.value = true;
+  } finally {
+    fontsLoading.value = false;
+  }
+}
+
+function toggleFontPicker() {
+  showFontPicker.value = !showFontPicker.value;
+  if (showFontPicker.value) {
+    loadFonts();
+    nextTick(() => fontSearchRef.value?.focus());
+  }
+}
+
+const filteredFonts = computed(() => {
+  const query = fontSearch.value.trim().toLowerCase();
+  if (!query) return fonts.value;
+  return fonts.value.filter((f) => f.toLowerCase().includes(query));
+});
+
+function selectFont(family: string) {
+  settingsStore.setFontFamilyName(family);
+  showFontPicker.value = false;
+  fontSearch.value = '';
+}
+
+function selectDefaultFont() {
+  settingsStore.setFontFamilyName('');
+  showFontPicker.value = false;
+  fontSearch.value = '';
+}
 
 const bellStyle = computed(() => settingsStore.bellStyle);
 const hasKey = computed(() => !!settingsStore.anthropicApiKey);
@@ -260,6 +328,126 @@ function resetSettings() {
         </div>
       </div>
 
+      <!-- Font Family -->
+      <div>
+        <span class="text-header block mb-3">FONT FAMILY</span>
+
+        <button
+          @click="toggleFontPicker"
+          class="w-full flex items-center justify-between px-3 py-2.5 transition-all duration-150"
+          :style="{
+            background: 'var(--bg-tertiary)',
+            border: showFontPicker ? '1px solid var(--accent-cyan)' : '1px solid var(--border-subtle)',
+          }"
+        >
+          <span
+            class="truncate text-left"
+            :style="{
+              color: 'var(--text-secondary)',
+              fontFamily: settingsStore.fontFamily,
+              fontSize: '0.8rem',
+            }"
+          >
+            {{ usingDefaultFont ? `System default (${fontFamilyName})` : fontFamilyName }}
+          </span>
+          <ChevronRightIcon
+            class="w-3 h-3 transition-transform duration-150 flex-shrink-0 ml-2"
+            :style="{ color: 'var(--text-muted)', transform: showFontPicker ? 'rotate(90deg)' : 'rotate(0)' }"
+          />
+        </button>
+
+        <Transition
+          enter-active-class="transition-all duration-150 ease-out"
+          enter-from-class="opacity-0 max-h-0"
+          enter-to-class="opacity-100 max-h-[400px]"
+          leave-active-class="transition-all duration-100 ease-in"
+          leave-from-class="opacity-100 max-h-[400px]"
+          leave-to-class="opacity-0 max-h-0"
+        >
+          <div
+            v-if="showFontPicker"
+            class="mt-2 overflow-hidden"
+            style="border: 1px solid var(--border-subtle);"
+          >
+            <div class="px-3 py-2" style="background: var(--bg-primary); border-bottom: 1px solid var(--border-subtle);">
+              <input
+                ref="fontSearchRef"
+                v-model="fontSearch"
+                type="text"
+                placeholder="Search monospace fonts..."
+                class="w-full bg-transparent outline-none"
+                style="color: var(--text-primary); font-size: 0.75rem;"
+              />
+            </div>
+
+            <div class="max-h-[280px] overflow-y-auto">
+              <div v-if="fontsLoading" class="px-3 py-4 text-center">
+                <span style="font-size: 0.7rem; color: var(--text-muted);">Scanning installed fonts...</span>
+              </div>
+
+              <div v-else-if="fontsFailed" class="px-3 py-4 text-center">
+                <span style="font-size: 0.7rem; color: var(--text-muted);">
+                  Could not read installed fonts. The default stack is still in use.
+                </span>
+              </div>
+
+              <template v-else>
+                <button
+                  @click="selectDefaultFont"
+                  class="w-full flex items-center justify-between px-3 py-2 transition-all duration-150 text-left"
+                  :style="{
+                    background: usingDefaultFont ? 'rgba(var(--accent-rgb), 0.08)' : 'transparent',
+                    borderBottom: '1px solid var(--border-subtle)',
+                  }"
+                >
+                  <span
+                    class="text-label"
+                    :style="{ color: usingDefaultFont ? 'var(--accent-cyan)' : 'var(--text-secondary)' }"
+                  >
+                    System default
+                  </span>
+                  <span style="font-size: 0.6rem; color: var(--text-muted);">first available of the stock stack</span>
+                </button>
+
+                <button
+                  v-for="family in filteredFonts"
+                  :key="family"
+                  @click="selectFont(family)"
+                  class="w-full flex items-center justify-between gap-3 px-3 py-2 transition-all duration-150 text-left"
+                  :style="{
+                    background: !usingDefaultFont && fontFamilyName === family ? 'rgba(var(--accent-rgb), 0.08)' : 'transparent',
+                    borderBottom: '1px solid var(--border-subtle)',
+                  }"
+                >
+                  <span
+                    class="truncate"
+                    :style="{
+                      color: !usingDefaultFont && fontFamilyName === family ? 'var(--accent-cyan)' : 'var(--text-secondary)',
+                      fontFamily: `'${family}', monospace`,
+                      fontSize: '0.8rem',
+                    }"
+                  >
+                    {{ family }}
+                  </span>
+                  <span
+                    class="flex-shrink-0"
+                    :style="{ color: 'var(--text-muted)', fontFamily: `'${family}', monospace`, fontSize: '0.75rem' }"
+                  >
+                    0O1lI
+                  </span>
+                </button>
+
+                <div v-if="filteredFonts.length === 0" class="px-3 py-4 text-center">
+                  <span style="font-size: 0.7rem; color: var(--text-muted);">
+                    {{ fontSearch ? 'No matching monospace font.' : 'No monospace fonts detected.' }}
+                  </span>
+                </div>
+              </template>
+            </div>
+          </div>
+        </Transition>
+      </div>
+
       <!-- Font Size -->
       <div>
         <span class="text-header block mb-4">FONT SIZE</span>
@@ -284,6 +472,156 @@ function resetSettings() {
           >
             <span class="text-lg font-light">+</span>
           </button>
+        </div>
+      </div>
+
+      <!-- Line Height -->
+      <div>
+        <div class="flex items-center justify-between mb-2">
+          <span class="text-header block">LINE HEIGHT</span>
+          <span style="font-size: 0.7rem; color: var(--text-secondary); font-weight: 600;">{{ lineHeight.toFixed(1) }}</span>
+        </div>
+        <input
+          type="range"
+          min="1"
+          max="2"
+          step="0.1"
+          :value="lineHeight"
+          @input="settingsStore.setLineHeight(+($event.target as HTMLInputElement).value)"
+          class="w-full accent-[var(--accent-cyan)]"
+        />
+        <span style="font-size: 0.6rem; color: var(--text-muted);">
+          Vertical space per row. Higher values are easier to scan; lower values fit more lines.
+        </span>
+      </div>
+
+      <!-- Letter Spacing -->
+      <div>
+        <div class="flex items-center justify-between mb-2">
+          <span class="text-header block">LETTER SPACING</span>
+          <span style="font-size: 0.7rem; color: var(--text-secondary); font-weight: 600;">{{ letterSpacing }}px</span>
+        </div>
+        <input
+          type="range"
+          min="0"
+          max="4"
+          step="1"
+          :value="letterSpacing"
+          @input="settingsStore.setLetterSpacing(+($event.target as HTMLInputElement).value)"
+          class="w-full accent-[var(--accent-cyan)]"
+        />
+        <span style="font-size: 0.6rem; color: var(--text-muted);">
+          Extra pixels between characters. Helps dense fonts at small sizes.
+        </span>
+      </div>
+
+      <!-- Font Weight -->
+      <div>
+        <span class="text-header block mb-4">FONT WEIGHT</span>
+        <div class="flex gap-2">
+          <button
+            v-for="option in weightOptions"
+            :key="option.value"
+            @click="settingsStore.setFontWeight(option.value)"
+            class="flex-1 px-4 py-2.5 transition-all duration-150 uppercase"
+            :style="{
+              background: fontWeight === option.value ? 'rgba(var(--accent-rgb), 0.08)' : 'var(--bg-tertiary)',
+              border: fontWeight === option.value ? '1px solid var(--accent-cyan)' : '1px solid var(--border-subtle)',
+              color: fontWeight === option.value ? 'var(--accent-cyan)' : 'var(--text-muted)',
+              fontSize: '0.65rem',
+              fontWeight: '600',
+              letterSpacing: '0.1em',
+            }"
+          >
+            {{ option.label }}
+          </button>
+        </div>
+      </div>
+
+      <!-- Bold Font Weight -->
+      <div>
+        <span class="text-header block mb-4">BOLD WEIGHT</span>
+        <div class="flex gap-2">
+          <button
+            v-for="option in boldWeightOptions"
+            :key="option.value"
+            @click="settingsStore.setFontWeightBold(option.value)"
+            class="flex-1 px-4 py-2.5 transition-all duration-150 uppercase"
+            :style="{
+              background: fontWeightBold === option.value ? 'rgba(var(--accent-rgb), 0.08)' : 'var(--bg-tertiary)',
+              border: fontWeightBold === option.value ? '1px solid var(--accent-cyan)' : '1px solid var(--border-subtle)',
+              color: fontWeightBold === option.value ? 'var(--accent-cyan)' : 'var(--text-muted)',
+              fontSize: '0.65rem',
+              fontWeight: '600',
+              letterSpacing: '0.1em',
+            }"
+          >
+            {{ option.label }}
+          </button>
+        </div>
+        <div class="mt-2">
+          <span style="font-size: 0.6rem; color: var(--text-muted);">
+            Weight used for bold output. Raise it if bold text is hard to tell apart.
+          </span>
+        </div>
+      </div>
+
+      <!-- Minimum Contrast -->
+      <div>
+        <span class="text-header block mb-4">MINIMUM CONTRAST</span>
+        <div class="flex gap-2">
+          <button
+            v-for="option in contrastRatioOptions"
+            :key="option.value"
+            @click="settingsStore.setMinimumContrastRatio(option.value)"
+            class="flex-1 px-3 py-2.5 transition-all duration-150 uppercase"
+            :style="{
+              background: minimumContrastRatio === option.value ? 'rgba(var(--accent-rgb), 0.08)' : 'var(--bg-tertiary)',
+              border: minimumContrastRatio === option.value ? '1px solid var(--accent-cyan)' : '1px solid var(--border-subtle)',
+              color: minimumContrastRatio === option.value ? 'var(--accent-cyan)' : 'var(--text-muted)',
+              fontSize: '0.65rem',
+              fontWeight: '600',
+              letterSpacing: '0.1em',
+            }"
+          >
+            {{ option.label }}
+          </button>
+        </div>
+        <div class="mt-2">
+          <span style="font-size: 0.6rem; color: var(--text-muted);">
+            Lightens or darkens ANSI colors that fail this ratio against the background — fixes
+            unreadable dark blues and grays without changing theme.
+          </span>
+        </div>
+      </div>
+
+      <!-- Live Preview -->
+      <div>
+        <span class="text-header block mb-3">PREVIEW</span>
+        <div
+          class="px-3 py-3 overflow-hidden"
+          :style="{
+            background: currentTheme.background,
+            border: '1px solid var(--border-subtle)',
+            fontFamily: settingsStore.fontFamily,
+            fontSize: `${fontSize}px`,
+            lineHeight: String(lineHeight),
+            letterSpacing: `${letterSpacing}px`,
+            fontWeight: fontWeight,
+            whiteSpace: 'pre',
+          }"
+        >
+          <div :style="{ color: currentTheme.green }">
+            <span :style="{ fontWeight: fontWeightBold }">~/primarch</span><span :style="{ color: currentTheme.foreground }"> $ git status</span>
+          </div>
+          <div :style="{ color: currentTheme.foreground }">On branch <span :style="{ color: currentTheme.cyan, fontWeight: fontWeightBold }">main</span></div>
+          <div :style="{ color: currentTheme.red }">  modified:   src/App.vue</div>
+          <div :style="{ color: currentTheme.brightBlack }">  Illegible? 0O1lI — raise contrast or weight.</div>
+        </div>
+        <div class="mt-2">
+          <span style="font-size: 0.6rem; color: var(--text-muted);">
+            Approximates terminal rendering. Minimum contrast applies in the terminal only.
+          </span>
         </div>
       </div>
 

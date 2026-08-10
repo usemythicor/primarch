@@ -126,6 +126,7 @@ const showMarkdownViewer = ref(false);
 const markdownSource = ref<string>('');
 const appVersion = ref('0.0.0');
 let globalShortcutUnlisten: UnlistenFn | null = null;
+let focusUnlisten: UnlistenFn | null = null;
 
 const terminalCount = computed(() => layoutStore.terminalCount);
 let openDirUnlisten: UnlistenFn | null = null;
@@ -396,6 +397,27 @@ onMounted(async () => {
   applyWindowOpacity(settingsStore.windowOpacity);
   // Get app version
   appVersion.value = await getVersion();
+
+  // Claim input focus on startup. On Windows the WebView2 child window can come
+  // up without keyboard focus even though the window is in the foreground, which
+  // makes the app look dead until you click away and back. Re-assert focus at the
+  // OS level, then hand it to the active terminal.
+  const claimFocus = async () => {
+    try { await appWindow.setFocus(); } catch { /* ignore */ }
+    layoutStore.requestPaneFocus();
+  };
+  claimFocus();
+  // Retry once after the first paint — panes mount asynchronously.
+  setTimeout(claimFocus, 150);
+
+  // Whenever the window regains OS focus (alt-tab, quake toggle), put the
+  // caret back in the active terminal instead of nowhere.
+  focusUnlisten = await appWindow.onFocusChanged(({ payload: focused }) => {
+    if (!focused) return;
+    if (showCommandPalette.value || showSettings.value || showWorkspaceManager.value) return;
+    layoutStore.requestPaneFocus();
+  });
+
   // Check for updates silently on startup
   checkForUpdates(true);
 
@@ -448,6 +470,9 @@ onUnmounted(async () => {
   }
   if (globalShortcutUnlisten) {
     globalShortcutUnlisten();
+  }
+  if (focusUnlisten) {
+    focusUnlisten();
   }
   try {
     await unregister('CmdOrCtrl+P');
