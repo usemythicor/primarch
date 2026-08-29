@@ -46,17 +46,12 @@ const contextMenuItems = computed<ContextMenuItem[]>(() => {
     {
       label: 'Copy',
       shortcut: 'Ctrl+C',
-      action: () => document.execCommand('copy'),
+      action: () => terminalPaneRef.value?.copySelection(),
     },
     {
       label: 'Paste',
       shortcut: 'Ctrl+V',
-      action: () => {
-        // Trigger paste via the terminal's paste handler
-        terminalPaneRef.value?.$el?.dispatchEvent(
-          new Event('paste', { bubbles: true })
-        );
-      },
+      action: () => terminalPaneRef.value?.paste(),
     },
     { separator: true as const },
     {

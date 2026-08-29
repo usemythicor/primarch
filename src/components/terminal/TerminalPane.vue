@@ -337,6 +337,21 @@ async function notifyCommandFinished(command: string, durationMs: number) {
   await sendOsNotification('Command finished', `${cmd || 'Command'} · ${formatDuration(durationMs)}`);
 }
 
+// Send text to the PTY as a *paste* rather than as raw keystrokes.
+// xterm's paste() normalizes CRLF/LF to CR and, when the shell has requested
+// bracketed paste (DEC private mode 2004 — PSReadLine, bash, zsh and most TUIs
+// do), wraps the text in ESC[200~/ESC[201~. Writing the clipboard string
+// straight to the PTY skips both: the embedded LF after each CR arrives while
+// the shell is still executing the previous line and gets swallowed, which is
+// why long pastes appeared truncated.
+function pasteIntoTerminal(text: string) {
+  if (terminal) {
+    terminal.paste(text); // routes through onData -> write()
+  } else if (sessionId.value) {
+    write(sessionId.value, text.replace(/\r?\n/g, '\r'));
+  }
+}
+
 // Handle clipboard paste
 async function handlePaste() {
   if (!sessionId.value) return;
@@ -353,7 +368,7 @@ async function handlePaste() {
         pendingPasteText.value = text;
         pendingPasteLines.value = lineCount;
       } else {
-        await write(sessionId.value, text);
+        pasteIntoTerminal(text);
       }
       return;
     }
@@ -376,7 +391,7 @@ async function handlePaste() {
       });
 
       // Paste the file path (with quotes in case of spaces)
-      await write(sessionId.value, `"${filePath}"`);
+      pasteIntoTerminal(`"${filePath}"`);
 
       // Show a floating thumbnail so the user can see what they pasted.
       showImagePreview(rgbaData, size.width, size.height, filePath);
@@ -550,7 +565,7 @@ async function confirmPaste() {
   const text = pendingPasteText.value;
   pendingPasteText.value = null;
   if (text && sessionId.value) {
-    await write(sessionId.value, text);
+    pasteIntoTerminal(text);
   }
   terminal?.focus();
 }
@@ -567,6 +582,14 @@ async function handleCopy(text: string) {
   } catch (e) {
     console.error('Failed to copy to clipboard:', e);
   }
+}
+
+// Copy the current selection. Exposed for the pane context menu, which cannot
+// use document.execCommand('copy') — xterm draws its selection in its own
+// overlay, so there is no document selection for the browser to copy.
+function copySelection() {
+  const selection = terminal?.getSelection();
+  if (selection) handleCopy(selection);
 }
 
 // Watch for theme/settings changes
@@ -1069,7 +1092,7 @@ function getBufferText(): string {
   return lines.join('\n');
 }
 
-defineExpose({ focus, toggleSearch, getBufferText });
+defineExpose({ focus, toggleSearch, getBufferText, paste: handlePaste, copySelection });
 </script>
 
 <template>
